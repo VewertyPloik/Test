@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zombie Survival Showdown</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@700&display=swap');
+  body {
+    margin: 0;
+    background: #202020;
+    color: white;
+    font-family: 'Comic Neue', cursive, Arial, sans-serif;
+    user-select: none;
+    overflow: hidden;
+  }
+  #homeScreen, #gameScreen, #shopScreen, #gameOverScreen, #winScreen {
+    position: absolute;
+    top:0; left:0; right:0; bottom:0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: #121212;
+    z-index: 100;
+  }
+  #gameScreen, #shopScreen, #gameOverScreen, #winScreen {
+    display: none;
+  }
+  h1 {
+    font-size: 3.5rem;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px #00cc00;
+  }
+  button {
+    background: #00cc00;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.5rem;
+    padding: 12px 30px;
+    margin: 10px;
+    color: #111;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  button:hover {
+    background: #00ee00;
+  }
+  #gameCanvas {
+    background: #1a1a1a;
+    border: 5px solid #00cc00;
+    border-radius: 20px;
+    display: block;
+    margin: 20px auto;
+    box-shadow: 0 0 15px #00cc00aa;
+    touch-action: none;
+  }
+  #infoBar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-top: 5px;
+    font-size: 1.3rem;
+  }
+  #healthBarContainer {
+    width: 250px;
+    height: 25px;
+    border: 2px solid white;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #440000;
+    margin-right: 10px;
+    position: relative;
+  }
+  #healthBar {
+    height: 100%;
+    background: #00cc00;
+    width: 100%;
+    transition: width 0.3s;
+  }
+  #healthText {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    font-weight: bold;
+    font-size: 1.1rem;
+    color: white;
+    user-select: none;
+    pointer-events: none;
+  }
+  #coinsDisplay {
+    font-weight: bold;
+    color: #ffff55;
+  }
+  #waveDisplay {
+    font-weight: bold;
+    color: #00ffcc;
+  }
+  #zombieCountDisplay {
+    font-weight: bold;
+    color: #ff5555;
+  }
+  #shopItems {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .shopItem {
+    background: #222;
+    border: 2px solid #00cc00;
+    border-radius: 10px;
+    margin: 10px;
+    padding: 10px 15px;
+    width: 180px;
+    cursor: pointer;
+    color: white;
+    user-select: none;
+    transition: background 0.3s;
+  }
+  .shopItem:hover {
+    background: #004400;
+  }
+  .shopItem.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .shopItem h3 {
+    margin: 5px 0;
+    font-size: 1.3rem;
+  }
+  .shopItem p {
+    margin: 3px 0;
+    font-size: 1rem;
+  }
+  /* Invisible joystick */
+  #joystickArea {
+    position: absolute;
+    top: 0; left: 0;
+    width: 800px; height: 450px;
+    z-index: 200;
+    touch-action: none;
+  }
+  /* Attack button style */
+  #attackBtn {
+    position: absolute;
+    bottom: 25px;
+    right: 30px;
+    font-size: 1.8rem;
+    padding: 20px 30px;
+    border-radius: 50px;
+    background: #00cc00cc;
+    border: none;
+    color: #111;
+    cursor: pointer;
+    user-select: none;
+    z-index: 300;
+    transition: background 0.3s;
+  }
+  #attackBtn:hover {
+    background: #00ee00cc;
+  }
+  /* Health bars for zombies */
+  .zombieHealthBar {
+    position: absolute;
+    height: 5px;
+    background: lime;
+    border-radius: 3px;
+    border: 1px solid black;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- HOME SCREEN -->
+<div id="homeScreen">
+  <h1>Zombie Survival Showdown</h1>
+  <button id="startBtn">Start Fighting</button>
+  <p style="margin-top: 20px; font-size: 1.2rem;">Survive 25 waves of zombies! 🧟‍♂️🧟🧟‍♀️</p>
+  <input id="cheatInput" type="text" placeholder="Enter cheat code" style="font-size:1.2rem; padding: 8px; margin-top: 15px; width: 200px; text-align: center;">
+  <button id="cheatBtn">Apply Cheat Code</button>
+  <p id="cheatMessage" style="color:#0f0; font-weight:bold; margin-top:10px; height:20px;"></p>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="gameScreen" style="position: relative;">
+  <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+  <!-- Invisible joystick -->
+  <div id="joystickArea"></div>
+
+  <!-- Attack button -->
+  <button id="attackBtn">Attack 🔪</button>
+
+  <div id="infoBar">
+    <div style="display:flex; align-items:center;">
+      <div id="healthBarContainer">
+        <div id="healthBar"></div>
+        <div id="healthText">100 / 100</div>
+      </div>
+      <div>Health</div>
+    </div>
+    <div id="coinsDisplay">Coins: 0 💰</div>
+    <div id="waveDisplay">Wave: 1 / 25</div>
+    <div id="zombieCountDisplay">Zombies: 0</div>
+  </div>
+</div>
+
+<!-- SHOP SCREEN -->
+<div id="shopScreen">
+  <h1>Shop - Upgrade Your Arsenal</h1>
+  <div id="coinsDisplayShop" style="font-size:1.5rem; color: #ffff55;"></div>
+  <div id="shopItems">
+    <!-- Items dynamically created -->
+  </div>
+  <button id="continueBtn" style="margin-top: 25px;">Continue to Next Wave</button>
+</div>
+
+<!-- GAME OVER SCREEN -->
+<div id="gameOverScreen">
+  <h1>Game Over</h1>
+  <p id="gameOverText" style="font-size: 1.8rem; margin: 20px;"></p>
+  <button id="restartBtn">Restart</button>
+</div>
+
+<!-- WIN SCREEN -->
+<div id="winScreen">
+  <h1>Congratulations!</h1>
+  <p style="font-size: 1.8rem; margin: 20px;">You survived all 25 waves! 🧟‍♂️💥🙎‍♂️</p>
+  <button id="winRestartBtn">Play Again</button>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // DOM elements
+  const homeScreen = document.getElementById('homeScreen');
+  const gameScreen = document.getElementById('gameScreen');
+  const shopScreen = document.getElementById('shopScreen');
+  const gameOverScreen = document.getElementById('gameOverScreen');
+  const winScreen = document.getElementById('winScreen');
+
+  const startBtn = document.getElementById('startBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const winRestartBtn = document.getElementById('winRestartBtn');
+
+  const continueBtn = document.getElementById('continueBtn');
+
+  const healthBar = document.getElementById('healthBar');
+  const healthText = document.getElementById('healthText');
+  const coinsDisplay = document.getElementById('coinsDisplay');
+  const coinsDisplayShop = document.getElementById('coinsDisplayShop');
+  const waveDisplay = document.getElementById('waveDisplay');
+  const zombieCountDisplay = document.getElementById('zombieCountDisplay');
+  const gameOverText = document.getElementById('gameOverText');
+  const shopItemsContainer = document.getElementById('shopItems');
+
+  const joystickArea = document.getElementById('joystickArea');
+  const attackBtn = document.getElementById('attackBtn');
+
+  const cheatInput = document.getElementById('cheatInput');
+  const cheatBtn = document.getElementById('cheatBtn');
+  const cheatMessage = document.getElementById('cheatMessage');
+
+  // Sounds
+  const sounds = {
+    knife: new Audio('https://actions.google.com/sounds/v1/weapons/knife_stab.ogg'),
+    pistol: new Audio('https://actions.google.com/sounds/v1/weapons/pistol_shot.ogg'),
+    rifle: new Audio('https://actions.google.com/sounds/v1/weapons/automatic_rifle.ogg'),
+    shotgun: new Audio('https://actions.google.com/sounds/v1/weapons/shotgun_fire.ogg'),
+    rocket: new Audio('https://actions.google.com/sounds/v1/explosions/explosion_large.ogg'),
+    hit: new Audio('https://actions.google.com/sounds/v1/human_voices/gasp.ogg'),
+    zombieGrowl: new Audio('https://actions.google.com/sounds/v1/creatures/zombie_growl_1.ogg'),
+    gameOver: new Audio('https://actions.google.com/sounds/v1/cartoon/slide_whistle_down.ogg'),
+    win: new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg'),
+  };
+  for(let s in sounds) sounds[s].volume = 0.15;
+
+  // Game constants & variables
+  const PLAYER_START_HEALTH = 100;
+  const ZOMBIE_HEALTH = 50;
+  const WAVE_TOTAL = 25;
+  const SHOP_TIME = 10 * 1000;
+  const ZOMBIE_DAMAGE = 0.5;
+  const ZOMBIE_HIT_COOLDOWN = 1000; // 1 second cooldown per zombie hit
+
+  const weapons = [
+    {
+      name: "Knife",
+      cost: 0,
+      damage: 10,
+      emoji: "🔪",
+      sfx: sounds.knife,
+      desc: "Basic melee weapon, infinite uses",
+      unlocked: true,
+      rangeMultiplier: 1,
+      multiHitCount: 1,
+    },
+    {
+      name: "Pistol",
+      cost: 50,
+      damage: 15,
+      emoji: "🔫",
+      sfx: sounds.pistol,
+      desc: "Basic handgun, better range",
+      unlocked: false,
+      rangeMultiplier: 1.5,
+      multiHitCount: 1,
+    },
+    {
+      name: "Rifle",
+      cost: 150,
+      damage: 25,
+      emoji: "🔫🔫",
+      sfx: sounds.rifle,
+      desc: "Powerful automatic rifle",
+      unlocked: false,
+      rangeMultiplier: 2,
+      multiHitCount: 1,
+    },
+    {
+      name: "Shotgun",
+      cost: 400,
+      damage: 50,
+      emoji: "🔫🔫🔫",
+      sfx: sounds.shotgun,
+      desc: "Close range but heavy damage, can hit 3 zombies",
+      unlocked: false,
+      rangeMultiplier: 1.5,
+      multiHitCount: 3,
+    },
+    {
+      name: "Rocket Launcher",
+      cost: 750,
+      damage: 100,
+      emoji: "🚀",
+      sfx: sounds.rocket,
+      desc: "Explodes up to 15 zombies at once",
+      unlocked: false,
+      rangeMultiplier: 5,
+      multiHitCount: 15,
+    },
+    {
+      name: "Apple",
+      cost: 20,
+      damage: 0,
+      emoji: "🍎",
+      sfx: null,
+      desc: "Restores 25 health",
+      unlocked: true,
+      healAmount: 25,
+      isHealItem: true,
+    },
+    {
+      name: "Full Heal Device",
+      cost: 100,
+      damage: 0,
+      emoji: "💊",
+      sfx: null,
+      desc: "Fully restores health",
+      unlocked: true,
+      healAmount: PLAYER_START_HEALTH,
+      isHealItem: true,
+    }
+  ];
+
+  let player = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    width: 35,
+    height: 50,
+    health: PLAYER_START_HEALTH,
+    coins: 0,
+    weaponIndex: 0,
+    speed: 1.4, // Will be doubled in movePlayer
+    isAttacking: false,
+    attackCooldown: 0,
+    facing: 'right',
+    lastHitTimes: new Map(), // track last hit time per zombie id
+  };
+
+  let zombies = [];
+  let wave = 0;
+  let gameRunning = false;
+  let inShop = false;
+  let keysPressed = {};
+  let lastAttackTime = 0;
+  let cheatCoinsActive = false;
+
+  // Joystick vars
+  let joystickActive = false;
+  let joystickStartX = 0;
+  let joystickStartY = 0;
+  let joystickCurrentX = 0;
+  let joystickCurrentY = 0;
+
+  // Helpers
+  function playSfx(sound) {
+    if (!sound) return;
+    sound.currentTime = 0;
+    sound.play();
+  }
+
+  function rectCollide(ax, ay, aw, ah, bx, by, bw, bh) {
+    return ax < bx + bw &&
+           ax + aw > bx &&
+           ay < by + bh &&
+           ah + ay > by;
+  }
+
+  function distance(x1, y1, x2, y2) {
+    return Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+  }
+
+  // Spawn zombies with fixed 50 health and increasing count/speed, no pile logic is a simple random spread
+  function spawnZombies(waveNum) {
+    zombies = [];
+    const baseCount = Math.min(5 + waveNum * 2, 60);
+    const baseSpeed = 0.7 + waveNum * 0.05;
+
+    for(let i=0; i<baseCount; i++) {
+      let side = Math.random() < 0.5 ? 'left' : 'right';
+      let startX = side === 'left' ? -30 - Math.random() * 300 : canvas.width + 30 + Math.random() * 300;
+      // Random y spread to prevent pileup (range bottom 350 to 420)
+      let startY = 350 + Math.random() * 70;
+
+      zombies.push({
+        id: i,
+        x: startX,
+        y: startY,
+        width: 40,
+        height: 60,
+        health: ZOMBIE_HEALTH,
+        maxHealth: ZOMBIE_HEALTH,
+        speed: baseSpeed + Math.random() * 0.4,
+        side: side,
+        emoji: ["🧟","🧟‍♀️","🧟‍♂️"][Math.floor(Math.random()*3)],
+        alive: true,
+        lastHitTime: 0,
+      });
+    }
+  }
+
+  // Reset player to start state
+  function resetPlayer() {
+    player.health = PLAYER_START_HEALTH;
+    if(!cheatCoinsActive) player.coins = 0;
+    player.weaponIndex = 0;
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
+    player.isAttacking = false;
+    player.attackCooldown = 0;
+    player.facing = 'right';
+    player.lastHitTimes.clear();
+  }
+
+  // Show only one screen
+  function showScreen(screen) {
+    [homeScreen, gameScreen, shopScreen, gameOverScreen, winScreen].forEach(s => {
+      s.style.display = 'none';
+    });
+    screen.style.display = 'flex';
+  }
+
+  // Draw player emoji & weapon
+  function drawPlayer() {
+    ctx.font = '50px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('🙎‍♂️', player.x, player.y + player.height);
+
+    const weaponEmoji = weapons[player.weaponIndex].emoji;
+    const offsetX = player.facing === 'right' ? 25 : -25;
+    ctx.font = '32px Arial';
+    ctx.fillText(weaponEmoji, player.x + offsetX, player.y + player.height - 20);
+  }
+
+  // Draw zombies with health bars
+  function drawZombies() {
+    ctx.font = '45px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    zombies.forEach(z => {
+      if (!z.alive) return;
+
+      ctx.fillText(z.emoji, z.x, z.y + z.height);
+      // Draw health bar above zombie
+      const healthBarWidth = 40;
+      const healthPercent = z.health / z.maxHealth;
+      ctx.fillStyle = '#550000';
+      ctx.fillRect(z.x - healthBarWidth/2, z.y + z.height + 5, healthBarWidth, 6);
+      ctx.fillStyle = '#00cc00';
+      ctx.fillRect(z.x - healthBarWidth/2, z.y + z.height + 5, healthBarWidth * healthPercent, 6);
+      ctx.strokeStyle = 'black';
+      ctx.strokeRect(z.x - healthBarWidth/2, z.y + z.height + 5, healthBarWidth, 6);
+    });
+  }
+
+  // Draw health bar
+  function updateHealthBar() {
+    healthBar.style.width = (player.health / PLAYER_START_HEALTH) * 100 + '%';
+    healthText.textContent = `${Math.max(0, player.health.toFixed(0))} / ${PLAYER_START_HEALTH}`;
+  }
+
+  // Update coin display
+  function updateCoins() {
+    coinsDisplay.textContent = `Coins: ${player.coins.toFixed(0)} 💰`;
+    coinsDisplayShop.textContent = `Coins: ${player.coins.toFixed(0)} 💰`;
+  }
+
+  // Update wave display
+  function updateWave() {
+    waveDisplay.textContent = `Wave: ${wave} / ${WAVE_TOTAL}`;
+  }
+
+  // Update zombie count display
+  function updateZombieCount() {
+    const aliveCount = zombies.filter(z => z.alive).length;
+    zombieCountDisplay.textContent = `Zombies: ${aliveCount}`;
+  }
+
+  // Player movement logic with joystick or keyboard
+  let moveX = 0, moveY = 0;
+  function movePlayer(deltaTime) {
+    const speed = player.speed * 2;
+
+    if (joystickActive) {
+      const dx = joystickCurrentX - joystickStartX;
+      const dy = joystickCurrentY - joystickStartY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if(dist > 10) {
+        moveX = dx / dist;
+        moveY = dy / dist;
+      } else {
+        moveX = 0;
+        moveY = 0;
+      }
+    } else {
+      moveX = 0; moveY = 0;
+      if(keysPressed['ArrowLeft'] || keysPressed['a']) moveX = -1;
+      if(keysPressed['ArrowRight'] || keysPressed['d']) moveX = 1;
+      if(keysPressed['ArrowUp'] || keysPressed['w']) moveY = -1;
+      if(keysPressed['ArrowDown'] || keysPressed['s']) moveY = 1;
+      if(moveX !== 0 && moveY !== 0) {
+        moveX *= Math.SQRT1_2;
+        moveY *= Math.SQRT1_2;
+      }
+    }
+
+    player.x += moveX * speed * deltaTime;
+    player.y += moveY * speed * deltaTime;
+
+    // Clamp inside canvas
+    player.x = Math.max(player.width / 2, Math.min(canvas.width - player.width / 2, player.x));
+    player.y = Math.max(player.height / 2, Math.min(canvas.height - player.height / 2, player.y));
+
+    // Update facing direction
+    if (moveX > 0) player.facing = 'right';
+    else if (moveX < 0) player.facing = 'left';
+  }
+
+  // Zombie movement toward player
+  function moveZombies(deltaTime) {
+    zombies.forEach(z => {
+      if (!z.alive) return;
+
+      // Move toward player
+      const dx = player.x - z.x;
+      const dy = player.y - z.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      if (dist > 10) {
+        const moveX = (dx / dist) * z.speed * deltaTime;
+        const moveY = (dy / dist) * z.speed * deltaTime;
+
+        // Try to avoid stacking: simple repel nearby zombies
+        zombies.forEach(other => {
+          if(other !== z && other.alive) {
+            const ddx = z.x - other.x;
+            const ddy = z.y - other.y;
+            const ddist = Math.sqrt(ddx*ddx + ddy*ddy);
+            if(ddist > 0 && ddist < 30) {
+              z.x += (ddx / ddist) * 0.5;
+              z.y += (ddy / ddist) * 0.5;
+            }
+          }
+        });
+
+        z.x += moveX;
+        z.y += moveY;
+      } else {
+        // Close enough to hit player if cooldown passed
+        const now = Date.now();
+        if(now - z.lastHitTime > ZOMBIE_HIT_COOLDOWN) {
+          player.health -= ZOMBIE_DAMAGE;
+          z.lastHitTime = now;
+          playSfx(sounds.hit);
+          if(player.health <= 0) {
+            gameOver();
+          }
+        }
+      }
+    });
+  }
+
+  // Attack logic with ranges & multi-hit
+  function attack() {
+    if(player.isAttacking) return; // prevent spam
+    player.isAttacking = true;
+    lastAttackTime = Date.now();
+
+    const weapon = weapons[player.weaponIndex];
+    playSfx(weapon.sfx);
+
+    // Attack range based on base 50 plus multiplier (can be tuned)
+    const baseRange = 50;
+    const attackRange = baseRange * weapon.rangeMultiplier;
+
+    // Get zombies in range & facing direction
+    const zombiesInRange = zombies.filter(z => {
+      if (!z.alive) return false;
+      const distToZombie = distance(player.x, player.y, z.x, z.y);
+      if(distToZombie > attackRange) return false;
+      // Check facing: if player faces right, zombie.x must be >= player.x - 20 else <= player.x + 20 to allow some range behind player
+      if(player.facing === 'right') return z.x >= player.x - 20;
+      else return z.x <= player.x + 20;
+    });
+
+    // Sort closest first
+    zombiesInRange.sort((a,b) => distance(player.x, player.y, a.x, a.y) - distance(player.x, player.y, b.x, b.y));
+
+    // Max hits for shotgun and rocket launcher
+    const maxHits = weapon.multiHitCount || 1;
+
+    // Damage up to maxHits zombies in range
+    let hits = 0;
+    zombiesInRange.some(z => {
+      z.health -= weapon.damage;
+      hits++;
+      if(z.health <= 0) {
+        z.alive = false;
+        player.coins += getCoinsPerKill();
+      }
+      return hits >= maxHits;
+    });
+
+    // Attack cooldown 700ms
+    setTimeout(() => { player.isAttacking = false; }, 700);
+
+    updateCoins();
+  }
+
+  // Coins per kill logic by wave ranges
+  function getCoinsPerKill() {
+    if(wave >= 21) return randomInt(45, 50);
+    else if(wave >= 16) return randomInt(36, 40);
+    else if(wave >= 11) return randomInt(11, 35);
+    else if(wave >= 5) return randomInt(6, 10);
+    else return randomInt(1, 5);
+  }
+
+  // Random int helper
+  function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // Game loop variables
+  let lastFrameTime = performance.now();
+
+  function gameLoop(time) {
+    if(!gameRunning) return;
+    const deltaTime = (time - lastFrameTime) / 16; // approx 60fps normalizer
+    lastFrameTime = time;
+
+    movePlayer(deltaTime);
+    moveZombies(deltaTime);
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw entities
+    drawPlayer();
+    drawZombies();
+
+    updateHealthBar();
+    updateCoins();
+    updateWave();
+    updateZombieCount();
+
+    // Check if wave cleared
+    if(zombies.filter(z => z.alive).length === 0) {
+      endWave();
+      return;
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Start wave
+  function startWave() {
+    wave++;
+    spawnZombies(wave);
+    gameRunning = true;
+    inShop = false;
+    showScreen(gameScreen);
+    updateWave();
+    updateCoins();
+    updateHealthBar();
+    updateZombieCount();
+    lastFrameTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // End wave: pause game & open shop (if wave < total)
+  function endWave() {
+    gameRunning = false;
+    inShop = true;
+
+    if(wave >= WAVE_TOTAL) {
+      // Player won!
+      showScreen(winScreen);
+      playSfx(sounds.win);
+      return;
+    }
+
+    // Show shop with items
+    showShop();
+    showScreen(shopScreen);
+  }
+
+  // Show shop items, disable those you can't afford or already have
+  function showShop() {
+    shopItemsContainer.innerHTML = '';
+
+    weapons.forEach((w, i) => {
+      if(i === 0) return; // knife no purchase
+
+      const itemDiv = document.createElement('div');
+      itemDiv.classList.add('shopItem');
+
+      // Disable if not enough coins or already unlocked
+      if(player.coins < w.cost || w.unlocked) {
+        itemDiv.classList.add('disabled');
+      }
+
+      itemDiv.innerHTML = `<h3>${w.name} ${w.emoji}</h3>
+      <p>${w.desc}</p>
+      <p>Cost: ${w.cost} coins</p>`;
+
+      itemDiv.addEventListener('click', () => {
+        if(player.coins >= w.cost && !w.unlocked) {
+          player.coins -= w.cost;
+          w.unlocked = true;
+          player.weaponIndex = i; // auto-equip on purchase
+          updateCoins();
+          showShop(); // refresh
+        }
+      });
+
+      shopItemsContainer.appendChild(itemDiv);
+    });
+    updateCoins();
+  }
+
+  // Game over handling
+  function gameOver() {
+    gameRunning = false;
+    cheatCoinsActive = false; // reset cheat coins on death
+    showScreen(gameOverScreen);
+    gameOverText.textContent = `You died on wave ${wave}. Coins reset. Try again!`;
+    playSfx(sounds.gameOver);
+  }
+
+  // Restart game after game over or win
+  function restartGame() {
+    wave = 0;
+    resetPlayer();
+    showScreen(homeScreen);
+  }
+
+  // Cheat code input logic
+  cheatBtn.addEventListener('click', () => {
+    const code = cheatInput.value.trim();
+    if(code === '77660') {
+      if(!cheatCoinsActive) {
+        player.coins += 100000;
+        cheatCoinsActive = true;
+        updateCoins();
+        cheatMessage.textContent = "Cheat applied! 100,000 coins added.";
+      } else {
+        cheatMessage.textContent = "Cheat already applied!";
+      }
+    } else {
+      cheatMessage.textContent = "Wrong code.";
+    }
+    setTimeout(() => { cheatMessage.textContent = ''; }, 3000);
+    cheatInput.value = '';
+  });
+
+  // Buttons events
+  startBtn.onclick = () => {
+    resetPlayer();
+    wave = 0;
+    startWave();
+    showScreen(gameScreen);
+  };
+  restartBtn.onclick = restartGame;
+  winRestartBtn.onclick = restartGame;
+
+  continueBtn.onclick = () => {
+    if(inShop) {
+      startWave();
+    }
+  };
+
+  // Attack button
+  attackBtn.addEventListener('click', () => {
+    if(gameRunning) attack();
+  });
+
+  // Keyboard controls
+  window.addEventListener('keydown', e => {
+    keysPressed[e.key.toLowerCase()] = true;
+  });
+  window.addEventListener('keyup', e => {
+    keysPressed[e.key.toLowerCase()] = false;
+  });
+
+  // Joystick control (invisible area)
+  joystickArea.addEventListener('pointerdown', (e) => {
+    joystickActive = true;
+    joystickStartX = e.clientX;
+    joystickStartY = e.clientY;
+    joystickCurrentX = e.clientX;
+    joystickCurrentY = e.clientY;
+  });
+  joystickArea.addEventListener('pointermove', (e) => {
+    if(joystickActive) {
+      joystickCurrentX = e.clientX;
+      joystickCurrentY = e.clientY;
+    }
+  });
+  joystickArea.addEventListener('pointerup', (e) => {
+    joystickActive = false;
+    moveX = 0; moveY = 0;
+  });
+  joystickArea.addEventListener('pointercancel', (e) => {
+    joystickActive = false;
+    moveX = 0; moveY = 0;
+  });
+
+  // Initial screen
+  showScreen(homeScreen);
+
+})();
+</script>
+
+</body>
+</html>
