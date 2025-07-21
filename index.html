@@ -1,0 +1,218 @@
+function startGame(difficulty) {
+  const paddleWidth = 10, paddleHeight = 100;
+  const player = { x: 0, y: canvas.height / 2 - paddleHeight / 2, score: 0 };
+  const ai = { x: canvas.width - paddleWidth, y: canvas.height / 2 - paddleHeight / 2, score: 0 };
+  const ball = { x: canvas.width / 2, y: canvas.height / 2, r: 10 };
+
+  let ballSpeedX = 5;
+  let ballSpeedY = 3;
+  let winScore = 5;
+
+  if (difficulty === "beginner") {
+    ballSpeedX = 2.0;
+    ballSpeedY = 1.5;
+    winScore = 5;
+  } else if (difficulty === "normal") {
+    ballSpeedX = 4;
+    ballSpeedY = 3;
+    winScore = 5;
+  } else if (difficulty === "hard") {
+    ballSpeedX = 6;
+    ballSpeedY = 4;
+    winScore = 5;
+  } else if (difficulty === "firstTo21") {
+    ballSpeedX = 5;
+    ballSpeedY = 4.2;
+    winScore = 21;
+  }
+
+  ball.speedX = ballSpeedX * (Math.random() > 0.5 ? 1 : -1);
+  ball.speedY = ballSpeedY * (Math.random() > 0.5 ? 1 : -1);
+
+  let moveUp = false;
+  let moveDown = false;
+
+  upBtn.replaceWith(upBtn.cloneNode(true));
+  downBtn.replaceWith(downBtn.cloneNode(true));
+
+  const newUpBtn = document.getElementById("upBtn");
+  const newDownBtn = document.getElementById("downBtn");
+
+  newUpBtn.addEventListener("mousedown", () => moveUp = true);
+  newUpBtn.addEventListener("mouseup", () => moveUp = false);
+  newDownBtn.addEventListener("mousedown", () => moveDown = true);
+  newDownBtn.addEventListener("mouseup", () => moveDown = false);
+
+  newUpBtn.addEventListener("touchstart", e => { e.preventDefault(); moveUp = true; });
+  newUpBtn.addEventListener("touchend", e => { e.preventDefault(); moveUp = false; });
+  newDownBtn.addEventListener("touchstart", e => { e.preventDefault(); moveDown = true; });
+  newDownBtn.addEventListener("touchend", e => { e.preventDefault(); moveDown = false; });
+
+  canvas.addEventListener("mousemove", e => {
+    const rect = canvas.getBoundingClientRect();
+    player.y = e.clientY - rect.top - paddleHeight / 2;
+    if (player.y < 0) player.y = 0;
+    if (player.y + paddleHeight > canvas.height) player.y = canvas.height - paddleHeight;
+  });
+
+  function drawPaddle(x, y) {
+    ctx.fillStyle = "white";
+    ctx.fillRect(x, y, paddleWidth, paddleHeight);
+  }
+
+  function drawBall() {
+    ctx.beginPath();
+    if (selectedBall === "white") ctx.fillStyle = "white";
+    else if (selectedBall === "red") ctx.fillStyle = "red";
+    else if (selectedBall === "gold") ctx.fillStyle = "gold";
+    else if (selectedBall === "monster") {
+      const glow = ctx.createRadialGradient(ball.x, ball.y, ball.r / 2, ball.x, ball.y, ball.r);
+      glow.addColorStop(0, "#39FF14");
+      glow.addColorStop(1, "transparent");
+      ctx.fillStyle = glow;
+    } else {
+      ctx.fillStyle = "white";
+    }
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.closePath();
+  }
+
+  function drawScores() {
+    ctx.fillStyle = "white";
+    ctx.font = "30px Arial";
+    ctx.fillText(player.score, canvas.width * 0.25, 50);
+    ctx.fillText(ai.score, canvas.width * 0.75, 50);
+  }
+
+  function resetBall() {
+    ball.x = canvas.width / 2;
+    ball.y = canvas.height / 2;
+    ball.speedX = ballSpeedX * (Math.random() > 0.5 ? 1 : -1);
+    ball.speedY = ballSpeedY * (Math.random() > 0.5 ? 1 : -1);
+  }
+
+  function gameOver(winner) {
+    alert(`${winner} wins!`);
+
+    if (difficulty === "firstTo21" && winner === "Player") {
+      coins += 10;
+      updateCoinDisplays();
+      alert("You earned 10 coins!");
+    }
+
+    if (difficulty === "beginner" && winner === "Player") beginnerWins++;
+    else if (difficulty === "normal" && winner === "Player") normalWins++;
+    else if (difficulty === "hard" && winner === "Player") hardWins++;
+
+    saveGameData();
+
+    canvas.style.display = "none";
+    controls.style.display = "none";
+    homeScreen.style.display = "flex";
+    beginnerWinsDisplay.textContent = `Beginner Wins: ${beginnerWins}`;
+    normalWinsDisplay.textContent = `Normal Wins: ${normalWins}`;
+    hardWinsDisplay.textContent = `Hard Wins: ${hardWins}`;
+  }
+
+  function aiMove() {
+    const centerAI = ai.y + paddleHeight / 2;
+
+    let aiSpeed = 6;
+    if (difficulty === "beginner") {
+      aiSpeed = 4.5;
+    } else if (difficulty === "normal") {
+      aiSpeed = 5.5;
+    }
+
+    if (centerAI < ball.y - 20) {
+      ai.y += aiSpeed;
+    } else if (centerAI > ball.y + 20) {
+      ai.y -= aiSpeed;
+    }
+
+    if (ai.y < 0) ai.y = 0;
+    if (ai.y + paddleHeight > canvas.height) ai.y = canvas.height - paddleHeight;
+  }
+
+  function update() {
+    if (moveUp) player.y -= 7;
+    if (moveDown) player.y += 7;
+
+    if (player.y < 0) player.y = 0;
+    if (player.y + paddleHeight > canvas.height) player.y = canvas.height - paddleHeight;
+
+    ball.x += ball.speedX;
+    ball.y += ball.speedY;
+
+    if (ball.y - ball.r < 0 || ball.y + ball.r > canvas.height) {
+      ball.speedY = -ball.speedY;
+    }
+
+    if (ball.x - ball.r < player.x + paddleWidth &&
+        ball.y > player.y &&
+        ball.y < player.y + paddleHeight) {
+      ball.speedX = -ball.speedX;
+      ball.x = player.x + paddleWidth + ball.r;
+      playPaddleHitSound();
+      ball.speedX *= 1.05;
+      ball.speedY *= 1.05;
+    }
+
+    if (ball.x + ball.r > ai.x &&
+        ball.y > ai.y &&
+        ball.y < ai.y + paddleHeight) {
+      ball.speedX = -ball.speedX;
+      ball.x = ai.x - ball.r;
+      playPaddleHitSound();
+      ball.speedX *= 1.05;
+      ball.speedY *= 1.05;
+    }
+
+    if (ball.x - ball.r < 0) {
+      ai.score++;
+      resetBall();
+    }
+
+    if (ball.x + ball.r > canvas.width) {
+      player.score++;
+      resetBall();
+    }
+
+    if (player.score >= winScore) {
+      gameOver("Player");
+      return;
+    }
+    if (ai.score >= winScore) {
+      gameOver("AI");
+      return;
+    }
+
+    aiMove();
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "white";
+    ctx.setLineDash([10, 15]);
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2, 0);
+    ctx.lineTo(canvas.width / 2, canvas.height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawPaddle(player.x, player.y);
+    drawPaddle(ai.x, ai.y);
+    drawBall();
+    drawScores();
+  }
+
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  gameLoop();
+}
