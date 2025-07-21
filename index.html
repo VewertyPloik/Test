@@ -472,20 +472,20 @@
     let aiMistakeChance = 0;
 
     if (difficulty === "beginner") {
-      ballSpeedX = 2.0;
-      ballSpeedY = 1.5;
+      ballSpeedX = 3.0;
+      ballSpeedY = 2.5;
       winScore = 5;
-      aiSpeed = 4.5;
+      aiSpeed = 3.3;
       aiMistakeChance = 0.25; // 25% chance to make a mistake
     } else if (difficulty === "normal") {
-      ballSpeedX = 4;
-      ballSpeedY = 3;
+      ballSpeedX = 4.5;
+      ballSpeedY = 3.8;
       winScore = 5;
-      aiSpeed = 5.5;
+      aiSpeed = 4.2;
       aiMistakeChance = 0.1; // 10% chance
     } else if (difficulty === "hard") {
-      ballSpeedX = 6;
-      ballSpeedY = 4;
+      ballSpeedX = 8;
+      ballSpeedY = 6.5;
       winScore = 5;
       aiSpeed = 6.5;
       aiMistakeChance = 0; // perfect AI
@@ -494,7 +494,7 @@
       ballSpeedY = 4.2;
       winScore = 21;
       aiSpeed = 5.5;
-      aiMistakeChance = 0.15; // 15% chance
+      aiMistakeChance = 0.1; // 10% chance
     }
 
     ball.speedX = ballSpeedX * (Math.random() > 0.5 ? 1 : -1);
