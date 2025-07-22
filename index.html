@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>2D Golf Game</title>
+<style>
+  body,html {
+    margin:0; padding:0; overflow:hidden; font-family:sans-serif; background:#49774a;
+    user-select:none;
+    -webkit-user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #gameCanvas {
+    background:#49774a;
+    display:none;
+    touch-action:none;
+  }
+  #homeScreen {
+    position:fixed; top:0; left:0; width:100vw; height:100vh;
+    background:#49774a;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    color:#fff;
+  }
+  #homeScreen h1 {
+    margin-bottom:0.2em;
+    font-size:3em;
+    text-shadow: 2px 2px 5px #000;
+  }
+  #courseButtons {
+    margin:1em 0;
+    display:flex;
+    flex-wrap: wrap;
+    gap: 1em;
+    justify-content:center;
+    max-width: 90vw;
+  }
+  #courseButtons button {
+    padding: 1em 1.5em;
+    font-size: 1.1em;
+    border-radius: 10px;
+    border:none;
+    cursor:pointer;
+    background:#6a9a56;
+    color:#fff;
+    box-shadow: 0 3px 7px rgba(0,0,0,0.3);
+    transition: background 0.3s;
+    min-width: 150px;
+  }
+  #courseButtons button:disabled {
+    background: #444;
+    cursor: not-allowed;
+    color: #aaa;
+    text-shadow:none;
+  }
+  #startGameBtn {
+    margin-top: 1em;
+    padding: 1em 3em;
+    font-size: 1.3em;
+    border-radius: 12px;
+    border:none;
+    background:#2b652b;
+    color:#fff;
+    cursor:pointer;
+    box-shadow: 0 3px 7px rgba(0,0,0,0.5);
+  }
+  #startGameBtn:disabled {
+    background: #444;
+    cursor: not-allowed;
+  }
+  #infoText {
+    position:fixed;
+    bottom:0; left:0; right:0;
+    background: rgba(0,0,0,0.5);
+    color:#fff;
+    font-size: 18px;
+    padding: 10px 20px;
+    font-weight: bold;
+    user-select:none;
+  }
+  #scoreCardOverlay {
+    position:fixed; top:0; left:0; width:100vw; height:100vh;
+    background: rgba(0,0,0,0.85);
+    color:#fff;
+    font-size: 22px;
+    display:none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1em;
+    text-align:center;
+  }
+  #scoreCardOverlay button {
+    margin-top: 1em;
+    padding: 1em 2em;
+    font-size: 1.2em;
+    border-radius: 10px;
+    border:none;
+    background:#49774a;
+    color:#fff;
+    cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="homeScreen">
+  <h1>2D Golf!</h1>
+  <div id="courseButtons"></div>
+  <button id="startGameBtn" disabled>Start Game</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<div id="infoText"></div>
+
+<div id="scoreCardOverlay">
+  <div id="scoreCardText"></div>
+  <button id="scoreCardCloseBtn">Back to Home</button>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const homeScreen = document.getElementById('homeScreen');
+  const courseButtonsDiv = document.getElementById('courseButtons');
+  const startBtn = document.getElementById('startGameBtn');
+  const infoText = document.getElementById('infoText');
+  const scoreCardOverlay = document.getElementById('scoreCardOverlay');
+  const scoreCardText = document.getElementById('scoreCardText');
+  const scoreCardCloseBtn = document.getElementById('scoreCardCloseBtn');
+
+  // Courses data (9 holes each)
+  const courses = {
+    sunshine: {
+      name: "Sunshine Valley",
+      totalPar: 36,
+      unlockStrokes: 9999, // Always unlocked first
+      unlockText: 'Unlocked',
+      levels: [
+        { par: 4, start:{x:100,y:500}, hole:{x:500,y:480}, obstacles:[{x:300,y:400,width:50,height:100,type:'tree'}], sandPits:[{x:380,y:510,radius:30}] },
+        { par: 3, start:{x:110,y:490}, hole:{x:530,y:350}, obstacles:[{x:450,y:400,width:70,height:40,type:'log'}], sandPits:[{x:300,y:440,radius:40}] },
+        { par: 5, start:{x:80,y:520}, hole:{x:750,y:420}, obstacles:[{x:480,y:380,width:100,height:50,type:'tree'}], sandPits:[] },
+        { par: 4, start:{x:110,y:500}, hole:{x:530,y:300}, obstacles:[{x:380,y:460,width:70,height:50,type:'log'}], sandPits:[{x:420,y:470,radius:35}] },
+        { par: 3, start:{x:120,y:480}, hole:{x:620,y:400}, obstacles:[], sandPits:[{x:570,y:430,radius:40}] },
+        { par: 4, start:{x:150,y:500}, hole:{x:700,y:350}, obstacles:[{x:480,y:450,width:80,height:50,type:'tree'}], sandPits:[] },
+        { par: 4, start:{x:140,y:520}, hole:{x:720,y:420}, obstacles:[{x:520,y:400,width:60,height:70,type:'log'}], sandPits:[{x:600,y:470,radius:30}] },
+        { par: 3, start:{x:100,y:490}, hole:{x:540,y:410}, obstacles:[], sandPits:[] },
+        { par: 5, start:{x:130,y:510}, hole:{x:780,y:440}, obstacles:[{x:500,y:420,width:90,height:60,type:'tree'}], sandPits:[{x:650,y:480,radius:40}] }
+      ]
+    },
+    moonlight: {
+      name: "Moonlight Valley",
+      totalPar: 38,
+      unlockStrokes: 30,
+      unlockText: 'Get 30 strokes or less on Sunshine Valley',
+      levels: [
+        { par: 4, start:{x:120,y:480}, hole:{x:550,y:460}, obstacles:[{x:350,y:450,width:60,height:100,type:'tree'}], sandPits:[{x:400,y:510,radius:35}] },
+        { par: 4, start:{x:100,y:510}, hole:{x:620,y:400}, obstacles:[{x:470,y:430,width:90,height:40,type:'log'}], sandPits:[{x:500,y:480,radius:30}] },
+        { par: 3, start:{x:130,y:490}, hole:{x:530,y:350}, obstacles:[{x:480,y:410,width:40,height:90,type:'tree'}], sandPits:[{x:400,y:440,radius:25}] },
+        { par: 5, start:{x:110,y:520}, hole:{x:760,y:420}, obstacles:[{x:510,y:400,width:120,height:50,type:'log'}], sandPits:[] },
+        { par: 4, start:{x:100,y:470}, hole:{x:540,y:390}, obstacles:[{x:390,y:440,width:60,height:60,type:'tree'}], sandPits:[{x:430,y:480,radius:40}] },
+        { par: 4, start:{x:140,y:500}, hole:{x:680,y:350}, obstacles:[{x:510,y:440,width:80,height:50,type:'tree'}], sandPits:[] },
+        { par: 4, start:{x:130,y:520}, hole:{x:700,y:420}, obstacles:[{x:520,y:420,width:60,height:70,type:'log'}], sandPits:[{x:600,y:460,radius:30}] },
+        { par: 3, start:{x:110,y:490}, hole:{x:560,y:400}, obstacles:[], sandPits:[] },
+        { par: 6, start:{x:140,y:520}, hole:{x:800,y:440}, obstacles:[{x:550,y:430,width:90,height:60,type:'tree'}], sandPits:[{x:660,y:480,radius:40}] }
+      ]
+    },
+    crystal: {
+      name: "Crystal Cove",
+      totalPar: 38,
+      unlockStrokes: 32,
+      unlockText: 'Get 32 strokes or less on Moonlight Valley',
+      levels: [
+        { par: 4, start:{x:130,y:470}, hole:{x:560,y:450}, obstacles:[{x:390,y:440,width:50,height:80,type:'tree'}], sandPits:[{x:420,y:500,radius:30}] },
+        { par: 3, start:{x:120,y:480}, hole:{x:600,y:400}, obstacles:[{x:470,y:420,width:80,height:40,type:'log'}], sandPits:[{x:480,y:460,radius:30}] },
+        { par: 5, start:{x:100,y:510}, hole:{x:720,y:420}, obstacles:[{x:520,y:400,width:100,height:50,type:'tree'}], sandPits:[] },
+        { par: 4, start:{x:110,y:480}, hole:{x:540,y:320}, obstacles:[{x:400,y:440,width:70,height:60,type:'log'}], sandPits:[{x:430,y:480,radius:30}] },
+        { par: 3, start:{x:130,y:490}, hole:{x:620,y:410}, obstacles:[], sandPits:[{x:580,y:440,radius:40}] },
+        { par: 4, start:{x:150,y:500}, hole:{x:690,y:360}, obstacles:[{x:500,y:450,width:90,height:50,type:'tree'}], sandPits:[] },
+        { par: 4, start:{x:140,y:520}, hole:{x:700,y:430}, obstacles:[{x:520,y:410,width:60,height:70,type:'log'}], sandPits:[{x:620,y:470,radius:30}] },
+        { par: 3, start:{x:110,y:480}, hole:{x:550,y:410}, obstacles:[], sandPits:[] },
+        { par: 6, start:{x:140,y:510}, hole:{x:780,y:450}, obstacles:[{x:540,y:430,width:90,height:60,type:'tree'}], sandPits:[{x:650,y:490,radius:40}] }
+      ]
+    },
+    frozen: {
+      name: "Frozen Fjord",
+      totalPar: 39,
+      unlockStrokes: 33,
+      unlockText: 'Get 33 strokes or less on Crystal Cove',
+      levels: [
+        { par: 4, start:{x:130,y:460}, hole:{x:570,y:450}, obstacles:[{x:400,y:440,width:50,height:80,type:'iceRock'}], sandPits:[{x:430,y:500,radius:30}] },
+        { par: 4, start:{x:120,y:480}, hole:{x:600,y:400}, obstacles:[{x:470,y:420,width:80,height:40,type:'log'}], sandPits:[{x:480,y:460,radius:30}] },
+        { par: 5, start:{x:110,y:510}, hole:{x:730,y:420}, obstacles:[{x:520,y:400,width:100,height:50,type:'iceRock'}], sandPits:[] },
+        { par: 4, start:{x:110,y:470}, hole:{x:540,y:330}, obstacles:[{x:400,y:440,width:70,height:60,type:'log'}], sandPits:[{x:430,y:480,radius:30}] },
+        { par: 3, start:{x:130,y:490}, hole:{x:620,y:410}, obstacles:[], sandPits:[{x:580,y:440,radius:40}] },
+        { par: 4, start:{x:150,y:500}, hole:{x:700,y:360}, obstacles:[{x:500,y:450,width:90,height:50,type:'iceRock'}], sandPits:[] },
+        { par: 4, start:{x:140,y:520}, hole:{x:710,y:430}, obstacles:[{x:520,y:410,width:60,height:70,type:'log'}], sandPits:[{x:620,y:470,radius:30}] },
+        { par: 3, start:{x:110,y:480}, hole:{x:560,y:410}, obstacles:[], sandPits:[] },
+        { par: 6, start:{x:140,y:510}, hole:{x:790,y:450}, obstacles:[{x:540,y:430,width:90,height:60,type:'iceRock'}], sandPits:[{x:650,y:490,radius:40}] }
+      ]
+    },
+    desert: {
+      name: "Desert Dunes",
+      totalPar: 39,
+      unlockStrokes: 33,
+      unlockText: 'Get 33 strokes or less on Frozen Fjord',
+      levels: [
+        { par: 4, start:{x:140,y:460}, hole:{x:580,y:460}, obstacles:[{x:410,y:440,width:50,height:80,type:'cactus'}], sandPits:[{x:440,y:510,radius:30}] },
+        { par: 4, start:{x:130,y:480}, hole:{x:620,y:420}, obstacles:[{x:480,y:420,width:80,height:40,type:'cactus'}], sandPits:[{x:490,y:470,radius:30}] },
+        { par: 5, start:{x:110,y:510}, hole:{x:740,y:430}, obstacles:[{x:530,y:410,width:100,height:50,type:'cactus'}], sandPits:[] },
+        { par: 4, start:{x:110,y:480}, hole:{x:560,y:330}, obstacles:[{x:410,y:440,width:70,height:60,type:'cactus'}], sandPits:[{x:440,y:480,radius:30}] },
+        { par: 3, start:{x:130,y:490}, hole:{x:630,y:420}, obstacles:[], sandPits:[{x:590,y:450,radius:40}] },
+        { par: 4, start:{x:160,y:500}, hole:{x:700,y:370}, obstacles:[{x:510,y:460,width:90,height:50,type:'cactus'}], sandPits:[] },
+        { par: 4, start:{x:150,y:520}, hole:{x:720,y:440}, obstacles:[{x:530,y:420,width:60,height:70,type:'cactus'}], sandPits:[{x:630,y:480,radius:30}] },
+        { par: 3, start:{x:120,y:480}, hole:{x:570,y:420}, obstacles:[], sandPits:[] },
+        { par: 6, start:{x:150,y:510}, hole:{x:800,y:460}, obstacles:[{x:550,y:440,width:90,height:60,type:'cactus'}], sandPits:[{x:660,y:500,radius:40}] }
+      ]
+    }
+  };
+
+  // Unlock conditions order
+  const courseOrder = ['sunshine','moonlight','crystal','frozen','desert'];
+
+  // Variables
+  let currentCourseKey = null;
+  let currentHoleIndex = 0;
+  let strokesThisHole = 0;
+  let totalStrokesForCourse = [];
+  let ballPos = {x:0, y:0};
+  let ballRadius = 10;
+  let ballVel = {x:0, y:0};
+  let dragging = false;
+  let dragStart = null;
+  let dragCurrent = null;
+  let shotPowerPercent = 0;
+  let maxPowerDistance = 90; // 3x farther pull distance
+  const friction = 0.98;
+  const sandFriction = 0.85;
+  const holeRadius = 15;
+  let courseUnlocked = {};
+
+  // Setup canvas size
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // Local storage helpers
+  function saveHighScore(courseKey, strokes) {
+    const prev = localStorage.getItem('golf_highscore_' + courseKey);
+    if (prev === null || strokes < parseInt(prev)) {
+      localStorage.setItem('golf_highscore_' + courseKey, strokes);
+    }
+  }
+  function getHighScore(courseKey) {
+    const val = localStorage.getItem('golf_highscore_' + courseKey);
+    if(val === null) return null;
+    return parseInt(val);
+  }
+  function saveUnlock(courseKey) {
+    localStorage.setItem('golf_unlocked_' + courseKey, 'true');
+  }
+  function isUnlocked(courseKey) {
+    if(courseKey === 'sunshine') return true; // always unlocked
+    return localStorage.getItem('golf_unlocked_' + courseKey) === 'true';
+  }
+  // Unlock first course on load
+  if(!isUnlocked('sunshine')) saveUnlock('sunshine');
+
+  // Setup home screen buttons
+  function showHomeScreen() {
+    homeScreen.style.display = 'flex';
+    canvas.style.display = 'none';
+    infoText.textContent = '';
+
+    courseButtonsDiv.innerHTML = '';
+    currentCourseKey = null;
+    startBtn.disabled = true;
+
+    courseOrder.forEach(courseKey => {
+      const course = courses[courseKey];
+      const unlocked = isUnlocked(courseKey);
+      const btn = document.createElement('button');
+      btn.textContent = `${course.name} (${course.totalPar} Par)`;
+      if(!unlocked) {
+        btn.textContent += ` - Locked\nUnlock: ${course.unlockText}`;
+        btn.disabled = true;
+      } else {
+        const hs = getHighScore(courseKey);
+        if(hs !== null) {
+          btn.textContent += ` - Best: ${hs} strokes`;
+        }
+      }
+      btn.addEventListener('click', () => {
+        currentCourseKey = courseKey;
+        startBtn.disabled = false;
+        updateInfoText();
+        highlightSelectedCourse(btn);
+      });
+      courseButtonsDiv.appendChild(btn);
+    });
+  }
+  function highlightSelectedCourse(selectedBtn) {
+    [...courseButtonsDiv.children].forEach(btn => {
+      btn.style.backgroundColor = (btn === selectedBtn) ? '#84b668' : '#6a9a56';
+    });
+  }
+
+  // Info text showing course/par/unlock info
+  function updateInfoText() {
+    if(!currentCourseKey) {
+      infoText.textContent = '';
+      return;
+    }
+    const course = courses[currentCourseKey];
+    let txt = `${course.name} - Total Par: ${course.totalPar}. `;
+    const idx = courseOrder.indexOf(currentCourseKey);
+    if(idx < courseOrder.length - 1) {
+      const nextCourseKey = courseOrder[idx + 1];
+      if(!isUnlocked(nextCourseKey)) {
+        const unlockTxt = courses[nextCourseKey].unlockText;
+        txt += `Unlock next course by: ${unlockTxt}.`;
+      } else {
+        txt += `Next course unlocked!`;
+      }
+    } else {
+      txt += `This is the last course.`;
+    }
+    infoText.textContent = txt;
+  }
+
+  // Start game
+  function startGame() {
+    if(!currentCourseKey) return;
+    homeScreen.style.display = 'none';
+    canvas.style.display = 'block';
+    currentHoleIndex = 0;
+    strokesThisHole = 0;
+    totalStrokesForCourse = [];
+    loadHole(currentCourseKey, currentHoleIndex);
+  }
+
+  // Load hole data and reset ball
+  function loadHole(courseKey, holeIndex) {
+    const holeData = courses[courseKey].levels[holeIndex];
+    ballPos.x = holeData.start.x;
+    ballPos.y = holeData.start.y;
+    ballVel.x = 0;
+    ballVel.y = 0;
+    strokesThisHole = 0;
+    dragging = false;
+    shotPowerPercent = 0;
+    obstacles = holeData.obstacles;
+    sandPits = holeData.sandPits;
+    holePos = holeData.hole;
+    holePar = holeData.par;
+  }
+
+  // Input helpers for desktop and mobile
+  function getPointerPos(evt) {
+    let rect = canvas.getBoundingClientRect();
+    let x, y;
+    if(evt.touches) {
+      x = evt.touches[0].clientX - rect.left;
+      y = evt.touches[0].clientY - rect.top;
+    } else {
+      x = evt.clientX - rect.left;
+      y = evt.clientY - rect.top;
+    }
+    return {x, y};
+  }
+
+  // Drag start event
+  function pointerDown(evt) {
+    if(ballVel.x !== 0 || ballVel.y !== 0) return; // can't drag while moving
+    let pos = getPointerPos(evt);
+    let dx = pos.x - ballPos.x;
+    let dy = pos.y - ballPos.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist < ballRadius + 20) { // drag start near ball
+      dragging = true;
+      dragStart = pos;
+      dragCurrent = pos;
+      shotPowerPercent = 0;
+    }
+  }
+
+  // Drag move event
+  function pointerMove(evt) {
+    if(!dragging) return;
+    evt.preventDefault();
+    dragCurrent = getPointerPos(evt);
+    // Calculate drag distance behind ball
+    let dx = ballPos.x - dragCurrent.x;
+    let dy = ballPos.y - dragCurrent.y;
+    let dragDist = Math.sqrt(dx*dx + dy*dy);
+    // Max drag 3x farther = maxPowerDistance (90)
+    if(dragDist > maxPowerDistance) {
+      let scale = maxPowerDistance / dragDist;
+      dx *= scale;
+      dy *= scale;
+      dragDist = maxPowerDistance;
+    }
+    shotPowerPercent = Math.floor((dragDist / maxPowerDistance)*100);
+    if(shotPowerPercent < 0) shotPowerPercent = 0;
+  }
+
+  // Drag end event - shoot ball
+  function pointerUp(evt) {
+    if(!dragging) return;
+    dragging = false;
+    // Calculate velocity based on drag vector
+    let dx = ballPos.x - dragCurrent.x;
+    let dy = ballPos.y - dragCurrent.y;
+    let dragDist = Math.sqrt(dx*dx + dy*dy);
+    if(dragDist > maxPowerDistance) dragDist = maxPowerDistance;
+    if(dragDist < 10) {
+      shotPowerPercent = 0;
+      return; // no shot if too small pull
+    }
+    let powerRatio = dragDist / maxPowerDistance;
+    // velocity multiplier to tune shot distance
+    let velocityScale = 10;
+    ballVel.x = dx / dragDist * velocityScale * powerRatio;
+    ballVel.y = dy / dragDist * velocityScale * powerRatio;
+    strokesThisHole++;
+  }
+
+  // Game variables
+  let obstacles = [];
+  let sandPits = [];
+  let holePos = {x:0, y:0};
+  let holePar = 0;
+
+  // Ball inside hole check
+  function ballInHole() {
+    let dx = ballPos.x - holePos.x;
+    let dy = ballPos.y - holePos.y;
+    return (Math.sqrt(dx*dx + dy*dy) <= holeRadius);
+  }
+
+  // Ball inside sand pit check
+  function inSandPit() {
+    for(let pit of sandPits) {
+      let dx = ballPos.x - pit.x;
+      let dy = ballPos.y - pit.y;
+      if(Math.sqrt(dx*dx + dy*dy) <= pit.radius) return true;
+    }
+    return false;
+  }
+
+  // Bounce off obstacles (simple rectangular bounce)
+  function handleObstacleBounce() {
+    obstacles.forEach(ob => {
+      if(ballPos.x + ballRadius > ob.x &&
+         ballPos.x - ballRadius < ob.x + ob.width &&
+         ballPos.y + ballRadius > ob.y &&
+         ballPos.y - ballRadius < ob.y + ob.height) {
+        // Simple bounce: invert velocity component based on which side hit
+        let centerX = ob.x + ob.width/2;
+        let centerY = ob.y + ob.height/2;
+        if(ballPos.x < centerX) ballVel.x = -Math.abs(ballVel.x);
+        else ballVel.x = Math.abs(ballVel.x);
+        if(ballPos.y < centerY) ballVel.y = -Math.abs(ballVel.y);
+        else ballVel.y = Math.abs(ballVel.y);
+        // reduce velocity a bit to simulate energy loss
+        ballVel.x *= 0.7;
+        ballVel.y *= 0.7;
+      }
+    });
+  }
+
+  // Keep ball inside canvas border
+  function keepBallInBounds() {
+    if(ballPos.x < ballRadius) {
+      ballPos.x = ballRadius;
+      ballVel.x = -ballVel.x * 0.7;
+    }
+    if(ballPos.x > canvas.width - ballRadius) {
+      ballPos.x = canvas.width - ballRadius;
+      ballVel.x = -ballVel.x * 0.7;
+    }
+    if(ballPos.y < ballRadius) {
+      ballPos.y = ballRadius;
+      ballVel.y = -ballVel.y * 0.7;
+    }
+    if(ballPos.y > canvas.height - ballRadius) {
+      ballPos.y = canvas.height - ballRadius;
+      ballVel.y = -ballVel.y * 0.7;
+    }
+  }
+
+  // Main update loop
+  function update() {
+    // Move ball
+    if(ballVel.x !== 0 || ballVel.y !== 0) {
+      // Check if ball in sand pit
+      let frictionToUse = inSandPit() ? sandFriction : friction;
+      ballPos.x += ballVel.x;
+      ballPos.y += ballVel.y;
+      ballVel.x *= frictionToUse;
+      ballVel.y *= frictionToUse;
+
+      // If velocity very low, stop ball
+      if(Math.abs(ballVel.x) < 0.05) ballVel.x = 0;
+      if(Math.abs(ballVel.y) < 0.05) ballVel.y = 0;
+
+      handleObstacleBounce();
+      keepBallInBounds();
+    }
+
+    // If ball stopped and in hole radius
+    if(ballVel.x === 0 && ballVel.y === 0) {
+      if(ballInHole()) {
+        // If shot power > 25%, bounce out
+        if(strokesThisHole > 0 && shotPowerPercent > 25) {
+          // Bounce out with velocity away from hole
+          let dx = ballPos.x - holePos.x;
+          let dy = ballPos.y - holePos.y;
+          let dist = Math.sqrt(dx*dx + dy*dy);
+          if(dist === 0) dist = 1;
+          ballVel.x = (dx/dist) * 5;
+          ballVel.y = (dy/dist) * 5;
+          shotPowerPercent = 0;
+        } else if(strokesThisHole > 0) {
+          // Hole completed!
+          totalStrokesForCourse[currentHoleIndex] = strokesThisHole;
+          currentHoleIndex++;
+          if(currentHoleIndex >= courses[currentCourseKey].levels.length) {
+            showScoreCard();
+          } else {
+            loadHole(currentCourseKey, currentHoleIndex);
+          }
+        }
+      }
+    }
+  }
+
+  // Draw game state
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw sand pits
+    sandPits.forEach(pit => {
+      ctx.fillStyle = '#d2b48c';
+      ctx.beginPath();
+      ctx.ellipse(pit.x, pit.y, pit.radius*1.2, pit.radius*0.8, 0, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // Draw obstacles
+    obstacles.forEach(ob => {
+      if(ob.type === 'tree') {
+        ctx.fillStyle = '#2e7d32';
+      } else if(ob.type === 'log') {
+        ctx.fillStyle = '#6d4c41';
+      } else if(ob.type === 'iceRock') {
+        ctx.fillStyle = '#81d4fa';
+      } else if(ob.type === 'cactus') {
+        ctx.fillStyle = '#388e3c';
+      } else {
+        ctx.fillStyle = 'brown';
+      }
+      ctx.fillRect(ob.x, ob.y, ob.width, ob.height);
+    });
+
+    // Draw hole
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(holePos.x, holePos.y, holeRadius, 0, Math.PI*2);
+    ctx.fill();
+
+    // Draw ball
+    ctx.fillStyle = '#f5f5f5';
+    ctx.beginPath();
+    ctx.arc(ballPos.x, ballPos.y, ballRadius, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#ccc';
+    ctx.stroke();
+
+    // Draw power % text if dragging
+    if(dragging) {
+      ctx.fillStyle = 'yellow';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Power: ${shotPowerPercent}%`, ballPos.x, ballPos.y - 25);
+    }
+
+    // Draw par and stroke info
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Hole ${currentHoleIndex + 1} / ${courses[currentCourseKey].levels.length}`, 20, 30);
+    ctx.fillText(`Par: ${holePar}`, 20, 55);
+    ctx.fillText(`Strokes this hole: ${strokesThisHole}`, 20, 80);
+    ctx.fillText(`Total strokes: ${totalStrokesForCourse.reduce((a,b) => a+b, 0) + strokesThisHole}`, 20, 105);
+  }
+
+  // Game loop
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Scorecard screen
+  function showScoreCard() {
+    canvas.style.display = 'none';
+    scoreCardOverlay.style.display = 'flex';
+
+    const course = courses[currentCourseKey];
+    const totalStrokes = totalStrokesForCourse.reduce((a,b) => a+b, 0);
+    saveHighScore(currentCourseKey, totalStrokes);
+
+    // Try to unlock next course if eligible
+    const idx = courseOrder.indexOf(currentCourseKey);
+    let unlockMsg = '';
+    if(idx < courseOrder.length - 1) {
+      const nextCourseKey = courseOrder[idx + 1];
+      if(!isUnlocked(nextCourseKey) && totalStrokes <= courses[nextCourseKey].unlockStrokes) {
+        saveUnlock(nextCourseKey);
+        unlockMsg = `<br>Congratulations! You unlocked <b>${courses[nextCourseKey].name}</b>!`;
+      } else if(!isUnlocked(nextCourseKey)) {
+        unlockMsg = `<br>You need ${courses[nextCourseKey].unlockText} to unlock <b>${courses[nextCourseKey].name}</b>.`;
+      } else {
+        unlockMsg = `<br><b>${courses[nextCourseKey].name}</b> is already unlocked.`;
+      }
+    } else {
+      unlockMsg = '<br>You finished the last course!';
+    }
+
+    // Build scorecard text
+    let scorecardHtml = `<h2>${course.name} Scorecard</h2>`;
+    scorecardHtml += `<p>Total Par: ${course.totalPar}</p>`;
+    scorecardHtml += `<p>Your strokes: ${totalStrokes}</p>`;
+    scorecardHtml += `<p>${totalStrokes <= course.totalPar ? '<b>Great job!</b>' : '<b>Try again to improve!</b>'}</p>`;
+    scorecardHtml += unlockMsg;
+
+    scoreCardText.innerHTML = scorecardHtml;
+  }
+
+  scoreCardCloseBtn.addEventListener('click', () => {
+    scoreCardOverlay.style.display = 'none';
+    showHomeScreen();
+  });
+
+  // Setup input listeners
+  canvas.addEventListener('mousedown', pointerDown);
+  canvas.addEventListener('touchstart', pointerDown);
+
+  canvas.addEventListener('mousemove', pointerMove);
+  canvas.addEventListener('touchmove', pointerMove, {passive:false});
+
+  canvas.addEventListener('mouseup', pointerUp);
+  canvas.addEventListener('touchend', pointerUp);
+
+  // Start button
+  startBtn.addEventListener('click', () => {
+    if(currentCourseKey) {
+      startGame();
+    }
+  });
+
+  // Initial screen setup
+  showHomeScreen();
+
+  // Start game loop
+  requestAnimationFrame(gameLoop);
+})();
+</script>
+
+</body>
+</html>
