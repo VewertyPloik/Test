@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>3D Bowling</title>
+<style>
+  body {
+    background: black;
+    color: white;
+    font-family: monospace;
+    text-align: center;
+    user-select: none;
+    margin: 0; padding: 0;
+  }
+  #difficultyButtons button, #throwBtn, #topButtons button {
+    font-size: 16px;
+    padding: 6px 14px;
+    margin: 5px;
+    cursor: pointer;
+  }
+  #lane {
+    font-size: 24px;
+    line-height: 1.2;
+    margin: 20px auto;
+    width: 220px;
+  }
+  #timingBarContainer {
+    width: 220px;
+    height: 20px;
+    background: #222;
+    margin: 10px auto;
+    position: relative;
+    border: 1px solid white;
+  }
+  #timingSlider {
+    width: 10px;
+    height: 20px;
+    background: #0f0;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  #info, #scores, #coinsDisplay, #frameScores {
+    margin-top: 15px;
+    font-size: 18px;
+  }
+  #frameScores {
+    white-space: pre;
+    font-family: monospace;
+    font-size: 16px;
+  }
+  #shop, #achievementsList {
+    margin-top: 20px;
+    border-top: 1px solid white;
+    padding-top: 15px;
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .ballItem {
+    display: inline-block;
+    margin: 5px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border: 1px solid white;
+    border-radius: 4px;
+  }
+  .selectedBall {
+    border-color: #0f0;
+    font-weight: bold;
+  }
+  .ballWhite { color: white; }
+  .ballBlue { color: #0af; }
+  .ballGreen { color: #0a0; }
+  .ballRed { color: #f00; }
+  .ballPurple { color: #a0a; }
+  .ballBronze { color: #b56a2e; }
+  .ballPink { color: #f5a; }
+  .ballSilver { color: #ccc; }
+  .ballGold { color: #fc0; }
+  .ballGlowing {
+    background: linear-gradient(45deg, #f00, #00f);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .ballBaseball { color: #f4f1ea; font-weight: bold; } /* special balls */
+  .ballGoldenBaseball { color: gold; font-weight: bold; text-shadow: 0 0 8px gold; }
+  .ballMeteor { color: #ff4500; font-weight: bold; }
+  .ballIce { color: #00ffff; font-weight: bold; }
+  .ballShadow { color: #444; font-weight: bold; }
+
+  #achievementPopup {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    border: 2px solid #0f0;
+    padding: 12px 20px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #0f0;
+    display: none;
+    z-index: 100;
+    border-radius: 8px;
+    white-space: pre-line;
+  }
+</style>
+</head>
+<body>
+
+<h1>3D Bowling</h1>
+
+<div id="difficultyButtons">
+  <button onclick="startGame('easy')">Easy</button>
+  <button onclick="startGame('normal')">Normal</button>
+  <button onclick="startGame('hard')">Hard</button>
+</div>
+
+<div id="coinsDisplay">Coins: 0</div>
+
+<div id="topButtons">
+  <button id="showAchievementsBtn">Achievements & Stats</button>
+  <button id="showShopBtn">Shop</button>
+</div>
+
+<div id="shop" style="display:none;"></div>
+<div id="achievementsList" style="display:none;"></div>
+
+<div id="lane"></div>
+
+<div id="timingBarContainer">
+  <div id="timingSlider"></div>
+</div>
+<button id="throwBtn" disabled>Throw Ball</button>
+
+<div id="info">Select a difficulty to start.</div>
+<div id="scores">You: 0 | AI: 0</div>
+<div id="frameScores"></div>
+
+<div id="achievementPopup"></div>
+
+<script>
+  // DOM elements
+  const laneDiv = document.getElementById('lane');
+  const timingSlider = document.getElementById('timingSlider');
+  const timingBar = document.getElementById('timingBarContainer');
+  const throwBtn = document.getElementById('throwBtn');
+  const infoDiv = document.getElementById('info');
+  const scoresDiv = document.getElementById('scores');
+  const difficultyButtons = document.getElementById('difficultyButtons');
+  const frameScoresDiv = document.getElementById('frameScores');
+  const coinsDisplay = document.getElementById('coinsDisplay');
+  const shopDiv = document.getElementById('shop');
+  const achievementsListDiv = document.getElementById('achievementsList');
+  const achievementPopup = document.getElementById('achievementPopup');
+  const showAchievementsBtn = document.getElementById('showAchievementsBtn');
+  const showShopBtn = document.getElementById('showShopBtn');
+
+  // Game variables
+  let pins = ['|','|','|','|','|','|','|','|','|','|'];
+  let ballPos = -1;
+  let isThrowing = false;
+  let sliderPos = 0;
+  let sliderDir = 1;
+  const sliderMax = 210; // timingBar width (220) - slider width (10)
+
+  let playerScore = 0;
+  let aiScore = 0;
+  let playerTurn = true;
+  let gameActive = false;
+  let aiDifficulty = null;
+
+  const totalFrames = 10;
+  let currentFrame = 1;
+
+  let playerFrameScores = [];
+  let aiFrameScores = [];
+
+  // Coins and achievements
+  let coins = 0;
+  let unlockedAchievements = new Set();
+
+  // Stats for wins & high scores, keyed by difficulty
+  let stats = {
+    easy: {wins:0, highScore:0},
+    normal: {wins:0, highScore:0},
+    hard: {wins:0, highScore:0}
+  };
+
+  // Balls info: name, cost, CSS class for color (added 5 special balls)
+  const balls = [
+    {name: "White", cost: 0, css: "ballWhite"},
+    {name: "Blue", cost: 40, css: "ballBlue"},
+    {name: "Green", cost: 40, css: "ballGreen"},
+    {name: "Red", cost: 40, css: "ballRed"},
+    {name: "Purple", cost: 40, css: "ballPurple"},
+    {name: "Bronze", cost: 50, css: "ballBronze"},
+    {name: "Pink", cost: 80, css: "ballPink"},
+    {name: "Silver", cost: 120, css: "ballSilver"},
+    {name: "Gold", cost: 150, css: "ballGold"},
+    {name: "Glowing", cost: 175, css: "ballGlowing"},
+    {name: "Baseball", cost: 200, css: "ballBaseball"},
+    {name: "Golden Baseball", cost: 350, css: "ballGoldenBaseball"},
+    {name: "Meteor Ball", cost: 300, css: "ballMeteor"},
+    {name: "Ice Ball", cost: 250, css: "ballIce"},
+    {name: "Shadow Ball", cost: 275, css: "ballShadow"},
+  ];
+
+  let selectedBallIndex = 0; // default white ball
+
+  // ======= Local Storage Keys =======
+  const LS_KEYS = {
+    coins: 'bowlingCoins',
+    achievements: 'bowlingAchievements',
+    stats: 'bowlingStats',
+    selectedBall: 'bowlingSelectedBall',
+    totalSpent: 'bowlingTotalSpent'
+  };
+
+  // ======= Functions =======
+
+  function saveData() {
+    localStorage.setItem(LS_KEYS.coins, coins);
+    localStorage.setItem(LS_KEYS.achievements, JSON.stringify(Array.from(unlockedAchievements)));
+    localStorage.setItem(LS_KEYS.stats, JSON.stringify(stats));
+    localStorage.setItem(LS_KEYS.selectedBall, selectedBallIndex);
+    localStorage.setItem(LS_KEYS.totalSpent, totalSpent);
+  }
+
+  function loadData() {
+    const storedCoins = localStorage.getItem(LS_KEYS.coins);
+    if(storedCoins !== null) coins = parseInt(storedCoins,10);
+
+    const storedAchievements = localStorage.getItem(LS_KEYS.achievements);
+    if(storedAchievements) {
+      try {
+        unlockedAchievements = new Set(JSON.parse(storedAchievements));
+      } catch(e) {
+        unlockedAchievements = new Set();
+      }
+    }
+
+    const storedStats = localStorage.getItem(LS_KEYS.stats);
+    if(storedStats) {
+      try {
+        stats = JSON.parse(storedStats);
+      } catch(e) {
+        stats = {
+          easy: {wins:0, highScore:0},
+          normal: {wins:0, highScore:0},
+          hard: {wins:0, highScore:0}
+        };
+      }
+    }
+
+    const storedBall = localStorage.getItem(LS_KEYS.selectedBall);
+    if(storedBall !== null) {
+      const idx = parseInt(storedBall,10);
+      if(!isNaN(idx) && idx >=0 && idx < balls.length) {
+        selectedBallIndex = idx;
+      }
+    }
+
+    const storedSpent = localStorage.getItem(LS_KEYS.totalSpent);
+    totalSpent = storedSpent ? parseInt(storedSpent,10) : 0;
+  }
+
+  // Update lane ASCII art with ball and pins
+  function updateLane() {
+    const ballChar = 'o';
+    let ballColorStart = '';
+    let ballColorEnd = '';
+    if(selectedBallIndex !== null) {
+      ballColorStart = `<span class="${balls[selectedBallIndex].css}">`;
+      ballColorEnd = '</span>';
+    }
+
+    let laneStr = '';
+
+    for(let row=0; row<10; row++) {
+      if(row === ballPos) {
+        laneStr += ' '.repeat(9) + ballColorStart + ballChar + ballColorEnd + '<br>';
+      } else if(row === 9) {
+        laneStr += '    ' + pins[0] + '<br>';
+      } else if(row === 8) {
+        laneStr += '   ' + pins[1] + ' ' + pins[2] + '<br>';
+      } else if(row === 7) {
+        laneStr += '  ' + pins[3] + ' ' + pins[4] + ' ' + pins[5] + '<br>';
+      } else if(row === 6) {
+        laneStr += ' ' + pins[6] + ' ' + pins[7] + ' ' + pins[8] + ' ' + pins[9] + '<br>';
+      } else {
+        laneStr += '<br>';
+      }
+    }
+    laneDiv.innerHTML = laneStr;
+  }
+
+  // Slider movement animation (always runs)
+  function moveSlider() {
+    sliderPos += sliderDir * 3;
+    if(sliderPos <= 0) sliderDir = 1;
+    if(sliderPos >= sliderMax) sliderDir = -1;
+    timingSlider.style.left = sliderPos + 'px';
+    requestAnimationFrame(moveSlider);
+  }
+
+  // Player pins knocked down by accuracy percentage
+  function playerPinsByAccuracy(accuracy) {
+    if (accuracy < 0.10) return 0;
+    else if (accuracy < 0.20) return 1;
+    else if (accuracy < 0.30) return 2;
+    else if (accuracy < 0.40) return 3;
+    else if (accuracy < 0.50) return 4;
+    else if (accuracy < 0.60) return 5;
+    else if (accuracy < 0.70) return 6;
+    else if (accuracy < 0.80) return 7;
+    else if (accuracy < 0.90) return 8;
+    else if (accuracy < 0.96) return 9;
+    else return 10;
+  }
+
+  // AI pins distribution per difficulty
+  const aiPinDistributions = {
+    easy: [0,0,10,20,20,30,10,5,3,1,1],
+    normal: [0,0,0,5,10,10,15,30,25,2,3],
+    hard: [0,0,0,0,0,0,10,20,25,30,15],
+  };
+
+  // Get weighted random pin count for AI based on difficulty
+  function aiPinsByDifficulty(difficulty) {
+    const dist = aiPinDistributions[difficulty];
+    const total = dist.reduce((a,b)=>a+b,0);
+    let r = Math.random() * total;
+    let sum = 0;
+    for(let i=0; i<dist.length; i++) {
+      sum += dist[i];
+      if(r <= sum) return i;
+    }
+    return 0;
+  }
+
+  // Knock pins visually & return knocked count
+  // isPlayer = true => use player logic, false => AI logic
+  function knockPins(precision, shift, isPlayer) {
+    let knocked;
+    if(isPlayer) {
+      knocked = playerPinsByAccuracy(precision);
+    } else {
+      knocked = aiPinsByDifficulty(aiDifficulty);
+    }
+
+    let count = 0;
+    for(let i=0; i<pins.length; i++) {
+      if(pins[i] === '|' && count < knocked) {
+        pins[i] = '_';
+        count++;
+      }
+    }
+    return knocked;
+  }
+
+  function animateBall(precision, shift, callback, isPlayer) {
+    let currentRow = -1;
+    function step() {
+      currentRow++;
+      ballPos = currentRow + shift;
+      if(ballPos < 0) ballPos = 0;
+      if(ballPos > 9) ballPos = 9;
+      updateLane();
+      if(currentRow < 9) {
+        setTimeout(step, 100);
+      } else {
+        const knocked = knockPins(precision, shift, isPlayer);
+        callback(knocked);
+      }
+    }
+    step();
+  }
+
+  // Show achievement popup & add coins if new
+  function showAchievement(text, coinsReward) {
+    if(unlockedAchievements.has(text)) return;
+    unlockedAchievements.add(text);
+    coins += coinsReward;
+    updateCoinsDisplay();
+    renderAchievements();
+    saveData();
+
+    achievementPopup.textContent = `Achievement Unlocked!\n${text}\n+${coinsReward} coins`;
+    achievementPopup.style.display = 'block';
+    setTimeout(() => {
+      achievementPopup.style.display = 'none';
+    }, 4000);
+  }
+
+  // Check achievements after game ends
+  function checkAchievements() {
+    let diff = Math.abs(playerScore - aiScore);
+    if(diff <= 5 && playerScore > aiScore) {
+      showAchievement("Win a nail biter", 20);
+    }
+    if(playerScore >= 50) {
+      showAchievement("Score 50 points in a game", 15);
+    }
+    if(playerScore >= 60) {
+      showAchievement("Score 60 points in a game", 20);
+    }
+    if(playerScore >= 75) {
+      showAchievement("Score 75 points in a game", 30);
+    }
+    if(playerScore === 100) {
+      showAchievement("Perfect 100 Point Game", 50);
+    }
+    // New achievements you wanted, check here:
+    if(playerFrameScores.includes(10)) {
+      showAchievement("First Strike!", 40);
+    }
+    if(playerScore >= 80) {
+      showAchievement("High Roller", 35);
+    }
+    if(playerScore >= 90) {
+      showAchievement("Sharpshooter", 30);
+    }
+    if(stats[aiDifficulty].wins >= 3) {
+      showAchievement("Grand Slam", 40);
+    }
+    if(coins >= 1000) {
+      showAchievement("Big Spender", 25);
+    }
+  }
+
+  // Player throws the ball
+  function playerThrow() {
+    if(isThrowing) return;
+    isThrowing = true;
+    throwBtn.disabled = true;
+
+    // Read sliderPos at throw time
+    const center = sliderMax / 2;
+    const distFromCenter = Math.abs(sliderPos - center);
+    const maxDist = center;
+    const precision = 1 - (distFromCenter / maxDist);
+    const maxShift = 3;
+    let shift = Math.round((sliderPos - center) / center * maxShift);
+
+    infoDiv.textContent = `You threw with precision ${(precision*100).toFixed(1)}%.`;
+    animateBall(precision, shift, knocked => {
+      playerScore += knocked;
+      playerFrameScores.push(knocked);
+      updateScores();
+      infoDiv.textContent += ` Knocked down ${knocked} pin${knocked !== 1 ? 's' : ''}.`;
+      isThrowing = false;
+      playerTurn = false;
+      if (currentFrame < totalFrames) {
+        setTimeout(aiThrow, 1500);
+      } else {
+        setTimeout(endGame, 1500);
+      }
+    }, true);
+  }
+
+  // AI throws the ball
+  function aiThrow() {
+    throwBtn.disabled = true;
+    infoDiv.textContent = 'AI is throwing...';
+
+    animateBall(1, 0, knocked => {
+      aiScore += knocked;
+      aiFrameScores.push(knocked);
+      updateScores();
+      infoDiv.textContent = `AI knocked down ${knocked} pin${knocked !== 1 ? 's' : ''}.`;
+      setTimeout(() => {
+        if(currentFrame === totalFrames) {
+          endGame();
+        } else {
+          currentFrame++;
+          resetPins();
+          playerTurn = true;
+          throwBtn.disabled = false;
+          infoDiv.textContent = `Your turn: Frame ${currentFrame} of ${totalFrames}.`;
+        }
+      }, 1500);
+    }, false);
+  }
+
+  function resetPins() {
+    pins = ['|','|','|','|','|','|','|','|','|','|'];
+    updateLane();
+  }
+
+  function updateScores() {
+    scoresDiv.textContent = `You: ${playerScore} | AI: ${aiScore}`;
+    let pf = playerFrameScores.map((v,i) => `F${i+1}:${v}`).join(' ');
+    let af = aiFrameScores.map((v,i) => `F${i+1}:${v}`).join(' ');
+    frameScoresDiv.textContent = `Your Pins: ${pf}\nAI Pins:   ${af}`;
+  }
+
+  function endGame() {
+    gameActive = false;
+    throwBtn.disabled = true;
+    difficultyButtons.style.display = 'block';
+
+    if(playerScore > aiScore) {
+      infoDiv.textContent = `You Win! ${playerScore} - ${aiScore}`;
+      coins += 25;
+      stats[aiDifficulty].wins++;
+      if(playerScore > stats[aiDifficulty].highScore) {
+        stats[aiDifficulty].highScore = playerScore;
+      }
+      showAchievement("Winner!", 25);
+    } else if(playerScore < aiScore) {
+      infoDiv.textContent = `You Lose! ${playerScore} - ${aiScore}`;
+    } else {
+      infoDiv.textContent = `It's a Tie! ${playerScore} - ${aiScore}`;
+      coins += 10;
+    }
+
+    checkAchievements();
+    updateCoinsDisplay();
+    saveData();
+  }
+
+  function startGame(difficulty) {
+    aiDifficulty = difficulty;
+    difficultyButtons.style.display = 'none';
+    throwBtn.disabled = false;
+    playerScore = 0;
+    aiScore = 0;
+    playerTurn = true;
+    currentFrame = 1;
+    playerFrameScores = [];
+    aiFrameScores = [];
+    resetPins();
+    updateScores();
+    infoDiv.textContent = `Your turn: Frame 1 of ${totalFrames}.`;
+    gameActive = true;
+  }
+
+  // Update coins text
+  function updateCoinsDisplay() {
+    coinsDisplay.textContent = `Coins: ${coins}`;
+  }
+
+  // Shop rendering & buying
+  let totalSpent = 0;
+  function renderShop() {
+    shopDiv.innerHTML = '<h2>Shop: Select or Buy Balls</h2>';
+    balls.forEach((ball, i) => {
+      const owned = i <= selectedBallIndex || coins >= ball.cost || ball.cost === 0;
+      let buyText = owned ? 'Select' : `Buy (${ball.cost})`;
+      shopDiv.innerHTML += `<div class="ballItem ${ball.css} ${selectedBallIndex === i ? 'selectedBall' : ''}" data-index="${i}" style="display:inline-block;">
+        ${ball.name} - <button class="buyBtn">${buyText}</button>
+      </div>`;
+    });
+
+    shopDiv.innerHTML += '<br><button id="closeShopBtn">Close Shop</button>';
+
+    document.querySelectorAll('.ballItem').forEach(el => {
+      el.querySelector('.buyBtn').onclick = () => {
+        const idx = parseInt(el.getAttribute('data-index'));
+        if(selectedBallIndex === idx) return; // Already selected
+
+        if(idx <= selectedBallIndex) {
+          // Just select owned ball
+          selectedBallIndex = idx;
+          infoDiv.textContent = `Selected ball: ${balls[idx].name}`;
+          saveData();
+          renderShop();
+        } else {
+          // Attempt purchase
+          if(coins >= balls[idx].cost) {
+            coins -= balls[idx].cost;
+            totalSpent += balls[idx].cost;
+            selectedBallIndex = idx;
+            infoDiv.textContent = `Purchased and selected ball: ${balls[idx].name}`;
+            updateCoinsDisplay();
+            saveData();
+            renderShop();
+          } else {
+            infoDiv.textContent = `Not enough coins to buy ${balls[idx].name}.`;
+          }
+        }
+      };
+    });
+
+    document.getElementById('closeShopBtn').onclick = () => {
+      shopDiv.style.display = 'none';
+      difficultyButtons.style.display = 'block';
+    };
+  }
+
+  // Achievements & stats rendering
+  function renderAchievements() {
+    achievementsListDiv.innerHTML = '<h2>Achievements & Stats</h2>';
+    if(unlockedAchievements.size === 0) {
+      achievementsListDiv.innerHTML += '<p>No achievements unlocked yet.</p>';
+    } else {
+      unlockedAchievements.forEach(a => {
+        achievementsListDiv.innerHTML += `<div>✔️ ${a}</div>`;
+      });
+    }
+    achievementsListDiv.innerHTML += '<hr>';
+    achievementsListDiv.innerHTML += `<div>Coins: ${coins}</div>`;
+    achievementsListDiv.innerHTML += `<div>Wins: Easy: ${stats.easy.wins}, Normal: ${stats.normal.wins}, Hard: ${stats.hard.wins}</div>`;
+    achievementsListDiv.innerHTML += `<div>High Scores: Easy: ${stats.easy.highScore}, Normal: ${stats.normal.highScore}, Hard: ${stats.hard.highScore}</div>`;
+    achievementsListDiv.innerHTML += '<button id="closeAchievementsBtn">Close</button>';
+
+    document.getElementById('closeAchievementsBtn').onclick = () => {
+      achievementsListDiv.style.display = 'none';
+      difficultyButtons.style.display = 'block';
+    };
+  }
+
+  // Event Listeners
+  throwBtn.addEventListener('click', () => {
+    if(gameActive && playerTurn) {
+      playerThrow();
+    }
+  });
+
+  showShopBtn.addEventListener('click', () => {
+    shopDiv.style.display = 'block';
+    achievementsListDiv.style.display = 'none';
+    difficultyButtons.style.display = 'none';
+    renderShop();
+  });
+
+  showAchievementsBtn.addEventListener('click', () => {
+    achievementsListDiv.style.display = 'block';
+    shopDiv.style.display = 'none';
+    difficultyButtons.style.display = 'none';
+    renderAchievements();
+  });
+
+  // Load saved data on page load
+  loadData();
+  updateCoinsDisplay();
+  updateLane();
+  moveSlider();
+
+</script>
+
+</body>
+</html>
