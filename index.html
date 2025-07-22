@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+<title>2D Golf Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body, html {
+    height: 100%; width: 100%; overflow: hidden;
+    font-family: Arial, sans-serif;
+    background: #87ceeb;
+    user-select: none;
+  }
+  #homeScreen {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100vh; background: #008080; color: #fff;
+    padding: 20px;
+  }
+  #homeScreen h1 {
+    font-size: 3rem; margin-bottom: 0.5rem;
+  }
+  #courseList {
+    margin: 20px 0; display: flex; flex-wrap: wrap; gap: 15px;
+    justify-content: center;
+  }
+  .courseBtn {
+    padding: 12px 25px; font-size: 1.25rem;
+    border: none; border-radius: 8px;
+    cursor: pointer; background: #004d4d; color: #fff;
+    transition: background 0.3s, opacity 0.3s;
+  }
+  .courseBtn:disabled {
+    background: #004d4d;
+    opacity: 0.3; cursor: not-allowed;
+  }
+  #startBtn {
+    margin-top: 20px;
+    padding: 14px 40px; font-size: 1.5rem;
+    border: none; border-radius: 8px;
+    background: #ffb84d; color: #000;
+    cursor: pointer;
+    transition: background 0.3s;
+  }
+  #startBtn:hover:not(:disabled) {
+    background: #ffa500;
+  }
+  #highScoreDisplay {
+    margin-top: 10px;
+    font-size: 1rem;
+    color: #ffe066;
+  }
+  #gameCanvas {
+    display: none;
+    background: #4caf50;
+    touch-action: none;
+  }
+  #infoText {
+    position: fixed; bottom: 8px; left: 8px;
+    font-size: 1rem; background: rgba(0,0,0,0.5);
+    color: white; padding: 4px 10px; border-radius: 5px;
+  }
+</style>
+</head>
+<body>
+
+<div id="homeScreen">
+  <h1>2D Golf!</h1>
+  <div id="courseList">
+    <button class="courseBtn" id="course1Btn">Sunshine Valley</button>
+    <button class="courseBtn" id="course2Btn" disabled title="Unlock by scoring 30 or less on Sunshine Valley">Moonlight Valley</button>
+    <button class="courseBtn" id="course3Btn" disabled title="Unlock by scoring 32 or less on Moonlight Valley">Crystal Cove</button>
+    <button class="courseBtn" id="course4Btn" disabled title="Unlock by scoring 33 or less on Crystal Cove">Frozen Fjord</button>
+    <button class="courseBtn" id="course5Btn" disabled title="Unlock by scoring 33 or less on Frozen Fjord">Desert Dunes</button>
+  </div>
+  <button id="startBtn" disabled>Start Game</button>
+  <div id="highScoreDisplay"></div>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<div id="infoText"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const homeScreen = document.getElementById('homeScreen');
+  const startBtn = document.getElementById('startBtn');
+  const highScoreDisplay = document.getElementById('highScoreDisplay');
+  const infoText = document.getElementById('infoText');
+
+  const courseButtons = [
+    document.getElementById('course1Btn'),
+    document.getElementById('course2Btn'),
+    document.getElementById('course3Btn'),
+    document.getElementById('course4Btn'),
+    document.getElementById('course5Btn'),
+  ];
+
+  // Courses data
+  const courses = {
+    sunshine: {
+      id: 1,
+      name: "Sunshine Valley",
+      totalPar: 34,
+      levels: [
+        { par: 3, start: {x:100,y:canvas.height-120}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:300,y:300,width:50,height:100,type:'tree'}],
+          sandPits: [{x:500,y:400,radius:40}]
+        },
+        { par: 4, start: {x:120,y:canvas.height-150}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:400,y:350,width:130,height:50,type:'log'}],
+          sandPits: [{x:600,y:450,radius:50}]
+        },
+        { par: 3, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:350,y:320,width:60,height:100,type:'tree'}],
+          sandPits: [{x:550,y:480,radius:30}]
+        },
+        { par: 4, start: {x:110,y:canvas.height-110}, hole: {x:canvas.width-140,y:110},
+          obstacles: [{x:370,y:340,width:100,height:50,type:'log'}],
+          sandPits: [{x:580,y:420,radius:40}]
+        },
+        { par: 3, start: {x:130,y:canvas.height-130}, hole: {x:canvas.width-130,y:130},
+          obstacles: [{x:390,y:360,width:60,height:90,type:'tree'}],
+          sandPits: [{x:620,y:460,radius:35}]
+        },
+        { par: 5, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:420,y:380,width:130,height:60,type:'log'}],
+          sandPits: [{x:640,y:470,radius:50}]
+        },
+        { par: 4, start: {x:120,y:canvas.height-120}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:450,y:400,width:70,height:80,type:'tree'}],
+          sandPits: [{x:660,y:490,radius:40}]
+        },
+        { par: 3, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:470,y:410,width:50,height:100,type:'tree'}],
+          sandPits: [{x:680,y:510,radius:30}]
+        },
+        { par: 5, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:490,y:420,width:130,height:60,type:'log'}],
+          sandPits: [{x:700,y:530,radius:50}]
+        },
+      ]
+    },
+    moonlight: {
+      id: 2,
+      name: "Moonlight Valley",
+      totalPar: 37,
+      levels: [
+        { par: 4, start: {x:100,y:canvas.height-120}, hole: {x:canvas.width-120,y:100},
+          obstacles: [
+            {x:canvas.width/2-60,y:canvas.height/2-20,width:50,height:100,type:'tree'},
+            {x:canvas.width/2+20,y:canvas.height/2+50,width:100,height:40,type:'log'}
+          ],
+          sandPits: [
+            {x:canvas.width/2-130,y:canvas.height/2+170,radius:70},
+            {x:canvas.width/2+80,y:canvas.height/2+130,radius:40}
+          ]
+        },
+        { par: 5, start: {x:120,y:canvas.height-150}, hole: {x:canvas.width-150,y:130},
+          obstacles: [
+            {x:canvas.width/2-40,y:canvas.height/2+10,width:130,height:50,type:'log'},
+            {x:canvas.width/2+70,y:canvas.height/2+120,width:40,height:90,type:'tree'}
+          ],
+          sandPits: [{x:canvas.width/2+60,y:canvas.height/2+210,radius:60}]
+        },
+        { par: 4, start: {x:90,y:canvas.height-130}, hole: {x:canvas.width-130,y:140},
+          obstacles: [
+            {x:canvas.width/2-100,y:canvas.height/2+60,width:60,height:100,type:'tree'},
+            {x:canvas.width/2+90,y:canvas.height/2+110,width:110,height:50,type:'log'}
+          ],
+          sandPits: [{x:canvas.width/2+10,y:canvas.height/2+190,radius:80}]
+        },
+        { par: 5, start: {x:110,y:canvas.height-110}, hole: {x:canvas.width-140,y:110},
+          obstacles: [
+            {x:canvas.width/2-60,y:canvas.height/2+80,width:100,height:50,type:'log'},
+            {x:canvas.width/2+40,y:canvas.height/2+140,width:60,height:90,type:'tree'}
+          ],
+          sandPits: [{x:canvas.width/2+60,y:canvas.height/2+180,radius:70}]
+        },
+        { par: 4, start: {x:130,y:canvas.height-130}, hole: {x:canvas.width-130,y:130},
+          obstacles: [{x:canvas.width/2+20,y:canvas.height/2+60,width:80,height:40,type:'log'}],
+          sandPits: [{x:canvas.width/2+100,y:canvas.height/2+150,radius:50}]
+        },
+        { par: 4, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:canvas.width/2-70,y:canvas.height/2+90,width:90,height:60,type:'tree'}],
+          sandPits: [{x:canvas.width/2-120,y:canvas.height/2+180,radius:60}]
+        },
+        { par: 5, start: {x:120,y:canvas.height-140}, hole: {x:canvas.width-150,y:140},
+          obstacles: [
+            {x:canvas.width/2-90,y:canvas.height/2+50,width:70,height:110,type:'tree'},
+            {x:canvas.width/2+50,y:canvas.height/2+110,width:120,height:60,type:'log'}
+          ],
+          sandPits: [{x:canvas.width/2-30,y:canvas.height/2+190,radius:80}]
+        },
+        { par: 3, start: {x:110,y:canvas.height-130}, hole: {x:canvas.width-140,y:110},
+          obstacles: [{x:canvas.width/2+40,y:canvas.height/2+80,width:50,height:100,type:'tree'}],
+          sandPits: [{x:canvas.width/2+70,y:canvas.height/2+170,radius:40}]
+        },
+        { par: 4, start: {x:100,y:canvas.height-120}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:canvas.width/2-60,y:canvas.height/2+100,width:100,height:40,type:'log'}],
+          sandPits: [{x:canvas.width/2-110,y:canvas.height/2+140,radius:70}]
+        },
+      ]
+    },
+    crystal: {
+      id: 3,
+      name: "Crystal Cove",
+      totalPar: 39,
+      levels: [
+        { par: 4, start: {x:100,y:canvas.height-120}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:400,y:350,width:60,height:120,type:'tree'}],
+          sandPits: [{x:600,y:450,radius:50}]
+        },
+        { par: 4, start: {x:120,y:canvas.height-150}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:350,y:320,width:130,height:60,type:'log'}],
+          sandPits: [{x:580,y:420,radius:60}]
+        },
+        { par: 4, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:360,y:330,width:70,height:90,type:'tree'}],
+          sandPits: [{x:560,y:480,radius:40}]
+        },
+        { par: 5, start: {x:110,y:canvas.height-110}, hole: {x:canvas.width-140,y:110},
+          obstacles: [{x:370,y:340,width:110,height:70,type:'log'}],
+          sandPits: [{x:580,y:420,radius:50}]
+        },
+        { par: 4, start: {x:130,y:canvas.height-130}, hole: {x:canvas.width-130,y:130},
+          obstacles: [{x:400,y:360,width:70,height:100,type:'tree'}],
+          sandPits: [{x:620,y:460,radius:40}]
+        },
+        { par: 4, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:420,y:380,width:120,height:70,type:'log'}],
+          sandPits: [{x:640,y:470,radius:60}]
+        },
+        { par: 6, start: {x:120,y:canvas.height-120}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:450,y:400,width:90,height:90,type:'tree'}],
+          sandPits: [{x:660,y:490,radius:50}]
+        },
+        { par: 3, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:470,y:410,width:60,height:120,type:'tree'}],
+          sandPits: [{x:680,y:510,radius:40}]
+        },
+        { par: 5, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:490,y:420,width:130,height:70,type:'log'}],
+          sandPits: [{x:700,y:530,radius:60}]
+        },
+      ]
+    },
+    frozen: {
+      id: 4,
+      name: "Frozen Fjord",
+      totalPar: 40,
+      levels: [
+        { par: 5, start: {x:100,y:canvas.height-120}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:400,y:350,width:70,height:130,type:'iceRock'}],
+          sandPits: [{x:600,y:450,radius:60}]
+        },
+        { par: 4, start: {x:120,y:canvas.height-150}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:350,y:320,width:140,height:60,type:'iceRock'}],
+          sandPits: [{x:580,y:420,radius:70}]
+        },
+        { par: 3, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:360,y:330,width:80,height:90,type:'iceRock'}],
+          sandPits: [{x:560,y:480,radius:50}]
+        },
+        { par: 6, start: {x:110,y:canvas.height-110}, hole: {x:canvas.width-140,y:110},
+          obstacles: [{x:370,y:340,width:110,height:70,type:'iceRock'}],
+          sandPits: [{x:580,y:420,radius:70}]
+        },
+        { par: 5, start: {x:130,y:canvas.height-130}, hole: {x:canvas.width-130,y:130},
+          obstacles: [{x:400,y:360,width:70,height:100,type:'iceRock'}],
+          sandPits: [{x:620,y:460,radius:60}]
+        },
+        { par: 4, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:420,y:380,width:120,height:70,type:'iceRock'}],
+          sandPits: [{x:640,y:470,radius:60}]
+        },
+        { par: 6, start: {x:120,y:canvas.height-120}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:450,y:400,width:90,height:90,type:'iceRock'}],
+          sandPits: [{x:660,y:490,radius:70}]
+        },
+        { par: 3, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:470,y:410,width:60,height:120,type:'iceRock'}],
+          sandPits: [{x:680,y:510,radius:50}]
+        },
+        { par: 4, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:490,y:420,width:130,height:70,type:'iceRock'}],
+          sandPits: [{x:700,y:530,radius:60}]
+        },
+      ]
+    },
+    desert: {
+      id: 5,
+      name: "Desert Dunes",
+      totalPar: 41,
+      levels: [
+        { par: 3, start: {x:100,y:canvas.height-120}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:400,y:350,width:80,height:120,type:'cactus'}],
+          sandPits: [{x:600,y:450,radius:70}]
+        },
+        { par: 5, start: {x:120,y:canvas.height-150}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:350,y:320,width:140,height:60,type:'log'}],
+          sandPits: [{x:580,y:420,radius:80}]
+        },
+        { par: 5, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:360,y:330,width:90,height:90,type:'cactus'}],
+          sandPits: [{x:560,y:480,radius:70}]
+        },
+        { par: 4, start: {x:110,y:canvas.height-110}, hole: {x:canvas.width-140,y:110},
+          obstacles: [{x:370,y:340,width:130,height:70,type:'log'}],
+          sandPits: [{x:580,y:420,radius:70}]
+        },
+        { par: 5, start: {x:130,y:canvas.height-130}, hole: {x:canvas.width-130,y:130},
+          obstacles: [{x:400,y:360,width:80,height:100,type:'cactus'}],
+          sandPits: [{x:620,y:460,radius:80}]
+        },
+        { par: 3, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:420,y:380,width:130,height:70,type:'log'}],
+          sandPits: [{x:640,y:470,radius:70}]
+        },
+        { par: 6, start: {x:120,y:canvas.height-120}, hole: {x:canvas.width-150,y:130},
+          obstacles: [{x:450,y:400,width:90,height:90,type:'cactus'}],
+          sandPits: [{x:660,y:490,radius:80}]
+        },
+        { par: 4, start: {x:140,y:canvas.height-140}, hole: {x:canvas.width-140,y:140},
+          obstacles: [{x:470,y:410,width:100,height:120,type:'cactus'}],
+          sandPits: [{x:680,y:510,radius:70}]
+        },
+        { par: 6, start: {x:100,y:canvas.height-100}, hole: {x:canvas.width-120,y:100},
+          obstacles: [{x:490,y:420,width:140,height:70,type:'log'}],
+          sandPits: [{x:700,y:530,radius:80}]
+        },
+      ]
+    },
+  };
+
+  let selectedCourseKey = 'sunshine';
+  let selectedCourse = courses[selectedCourseKey];
+  let level = 0;
+  let strokesThisHole = 0;
+  let totalStrokes = [];
+  let ballPos = {x:0,y:0};
+  let ballVel = {x:0,y:0};
+  let dragging = false;
+  let dragStart = null;
+  let dragCurrent = null;
+  let shotPowerPercent = 0;
+  let ballRadius = 10;
+  let holeRadius = 15;
+  const maxPowerDistance = 30 * 3; // 3x farther for drag distance max
+  const powerPercentThreshold = 25; // Above this bounce out of hole
+  const friction = 0.98;
+  const sandFriction = 0.85;
+
+  // Colors & styles
+  const obstacleColors = {
+    tree: '#228B22',
+    log: '#8B4513',
+    iceRock: '#A9D0F5',
+    cactus: '#5A7D4E',
+  };
+
+  const sandColor = '#EEDC82';
+
+  // Canvas setup & resizing
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // Utility functions
+  function distance(a,b) {
+    return Math.hypot(a.x-b.x,a.y-b.y);
+  }
+  function pointInRect(px,py,rect) {
+    return px >= rect.x && px <= rect.x+rect.width && py >= rect.y && py <= rect.y+rect.height;
+  }
+  function rectCircleCollision(circle,rect) {
+    let distX = Math.abs(circle.x - rect.x - rect.width/2);
+    let distY = Math.abs(circle.y - rect.y - rect.height/2);
+
+    if (distX > (rect.width/2 + circle.radius)) { return false; }
+    if (distY > (rect.height/2 + circle.radius)) { return false; }
+
+    if (distX <= (rect.width/2)) { return true; }
+    if (distY <= (rect.height/2)) { return true; }
+
+    let dx=distX-rect.width/2;
+    let dy=distY-rect.height/2;
+    return (dx*dx+dy*dy <= (circle.radius*circle.radius));
+  }
+
+  // Draw helpers
+  function drawBall() {
+    ctx.beginPath();
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 5;
+    ctx.arc(ballPos.x, ballPos.y, ballRadius, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  function drawHole() {
+    ctx.beginPath();
+    ctx.fillStyle = '#000';
+    ctx.arc(selectedCourse.levels[level].hole.x, selectedCourse.levels[level].hole.y, holeRadius, 0, Math.PI*2);
+    ctx.fill();
+  }
+  function drawObstacles() {
+    for (const obs of selectedCourse.levels[level].obstacles) {
+      ctx.fillStyle = obstacleColors[obs.type] || '#333';
+      ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+    }
+  }
+  function drawSandPits() {
+    for (const sand of selectedCourse.levels[level].sandPits) {
+      ctx.beginPath();
+      ctx.fillStyle = sandColor;
+      ctx.arc(sand.x, sand.y, sand.radius, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  function drawPowerLine() {
+    if (!dragging || !dragStart || !dragCurrent) return;
+    ctx.beginPath();
+    ctx.strokeStyle = 'yellow';
+    ctx.lineWidth = 3;
+    ctx.moveTo(ballPos.x, ballPos.y);
+    ctx.lineTo(dragCurrent.x, dragCurrent.y);
+    ctx.stroke();
+  }
+  function drawPowerPercent() {
+    if (!dragging || !dragStart || !dragCurrent) return;
+    ctx.font = '20px Arial';
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 3;
+    const dist = Math.min(distance(dragStart, dragCurrent)*3, maxPowerDistance);
+    let percent = Math.round((dist / maxPowerDistance)*100);
+    percent = Math.min(100, percent);
+    ctx.strokeText(percent + '%', ballPos.x + 15, ballPos.y - 15);
+    ctx.fillText(percent + '%', ballPos.x + 15, ballPos.y - 15);
+  }
+
+  // Input handling
+  function getPointerPos(evt) {
+    if (evt.touches && evt.touches.length > 0) {
+      return { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
+    }
+    return { x: evt.clientX, y: evt.clientY };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (ballVel.x !== 0 || ballVel.y !== 0) return; // Only pull if ball stopped
+    const pos = getPointerPos(e);
+    if (distance(pos, ballPos) <= ballRadius+15) {
+      dragging = true;
+      dragStart = pos;
+      dragCurrent = pos;
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    dragCurrent = getPointerPos(e);
+  });
+
+  canvas.addEventListener('pointerup', e => {
+    if (!dragging) return;
+    dragging = false;
+    const dragDist = Math.min(distance(dragStart, dragCurrent)*3, maxPowerDistance);
+    if (dragDist < 5) return; // Too little power to shoot
+
+    const angle = Math.atan2(ballPos.y - dragCurrent.y, ballPos.x - dragCurrent.x);
+    const powerRatio = dragDist / maxPowerDistance;
+    shotPowerPercent = Math.round(powerRatio*33;
+
+    // Set velocity proportional to power
+    ballVel.x = Math.cos(angle) * powerRatio * 15;
+    ballVel.y = Math.sin(angle) * powerRatio * 15;
+  });
+
+  // Game logic
+  function updateBall() {
+    if (ballVel.x === 0 && ballVel.y === 0) return;
+
+    // Move ball
+    ballPos.x += ballVel.x;
+    ballPos.y += ballVel.y;
+
+    // Friction and slow down on sand pits
+    let onSand = false;
+    for (const sand of selectedCourse.levels[level].sandPits) {
+      if (distance(ballPos, sand) <= sand.radius + ballRadius) {
+        onSand = true;
+        break;
+      }
+    }
+    if (onSand) {
+      ballVel.x *= sandFriction;
+      ballVel.y *= sandFriction;
+    } else {
+      ballVel.x *= friction;
+      ballVel.y *= friction;
+    }
+
+    // Bounce off canvas borders
+    if (ballPos.x < ballRadius) {
+      ballPos.x = ballRadius;
+      ballVel.x = -ballVel.x * 0.6;
+    }
+    if (ballPos.x > canvas.width - ballRadius) {
+      ballPos.x = canvas.width - ballRadius;
+      ballVel.x = -ballVel.x * 0.6;
+    }
+    if (ballPos.y < ballRadius) {
+      ballPos.y = ballRadius;
+      ballVel.y = -ballVel.y * 0.6;
+    }
+    if (ballPos.y > canvas.height - ballRadius) {
+      ballPos.y = canvas.height - ballRadius;
+      ballVel.y = -ballVel.y * 0.6;
+    }
+
+    // Bounce off obstacles
+    for (const obs of selectedCourse.levels[level].obstacles) {
+      const rect = {x: obs.x, y: obs.y, width: obs.width, height: obs.height};
+      if (rectCircleCollision({x: ballPos.x, y: ballPos.y, radius: ballRadius}, rect)) {
+        // Simple bounce: reverse velocity depending on collision side
+        // Check horizontal collision
+        if (ballPos.x < rect.x || ballPos.x > rect.x + rect.width) {
+          ballVel.x = -ballVel.x * 0.7;
+        }
+        // Check vertical collision
+        if (ballPos.y < rect.y || ballPos.y > rect.y + rect.height) {
+          ballVel.y = -ballVel.y * 0.7;
+        }
+        // Push ball out of obstacle
+        if (ballPos.x < rect.x) ballPos.x = rect.x - ballRadius;
+        else if (ballPos.x > rect.x + rect.width) ballPos.x = rect.x + rect.width + ballRadius;
+        if (ballPos.y < rect.y) ballPos.y = rect.y - ballRadius;
+        else if (ballPos.y > rect.y + rect.height) ballPos.y = rect.y + rect.height + ballRadius;
+      }
+    }
+
+    // Check hole collision
+    const holePos = selectedCourse.levels[level].hole;
+    const distToHole = distance(ballPos, holePos);
+
+    if (distToHole <= holeRadius) {
+      if (shotPowerPercent > powerPercentThreshold) {
+        // Bounce out of hole if too strong
+        ballVel.x = -ballVel.x * 0.8;
+        ballVel.y = -ballVel.y * 0.8;
+      } else {
+        // Hole in one!
+        nextHole();
+      }
+    }
+
+    // Stop ball if very slow
+    if (Math.abs(ballVel.x) < 0.05) ballVel.x = 0;
+    if (Math.abs(ballVel.y) < 0.05) ballVel.y = 0;
+  }
+
+  // Game progression
+  function startLevel() {
+    const lvlData = selectedCourse.levels[level];
+    ballPos.x = lvlData.start.x;
+    ballPos.y = lvlData.start.y;
+    ballVel.x = 0;
+    ballVel.y = 0;
+    strokesThisHole = 0;
+    shotPowerPercent = 0;
+    infoText.textContent = `Hole ${level+1} | Par: ${lvlData.par} | Strokes: 0`;
+  }
+
+  function nextHole() {
+    totalStrokes.push(strokesThisHole);
+    level++;
+    if (level >= selectedCourse.levels.length) {
+      showScorecard();
+    } else {
+      startLevel();
+    }
+  }
+
+  function showScorecard() {
+    const totalScore = totalStrokes.reduce((a,b)=>a+b,0);
+    let scorecardMsg = `🏌️ Scorecard for ${selectedCourse.name}:\n\n`;
+    for (let i = 0; i < selectedCourse.levels.length; i++) {
+      const diff = totalStrokes[i] - selectedCourse.levels[i].par;
+      const result = diff === 0 ? "Par" : diff > 0 ? "+" + diff : diff;
+      scorecardMsg += `Hole ${i + 1}: ${totalStrokes[i]} strokes (${result})\n`;
+    }
+    scorecardMsg += `\nTotal strokes: ${totalScore}`;
+
+    alert(scorecardMsg);
+
+    // Save highscore (lowest strokes)
+    const key = `golf_highscore_${selectedCourseKey}`;
+    const prevBest = localStorage.getItem(key);
+    if (!prevBest || totalScore < parseInt(prevBest)) {
+      localStorage.setItem(key, totalScore);
+      alert("🎉 New Best Score!");
+    }
+
+    // Unlock next course if conditions met
+    unlockNextCourse(totalScore);
+
+    totalStrokes = [];
+    level = 0;
+    selectedCourseKey = 'sunshine';
+    selectedCourse = courses[selectedCourseKey];
+    showHomeScreen();
+  }
+
+  // Unlock system
+  function unlockNextCourse(totalScore) {
+    const unlocks = [
+      { key: 'moonlight', req: 30, prev: 'sunshine' },
+      { key: 'crystal', req: 32, prev: 'moonlight' },
+      { key: 'frozen', req: 33, prev: 'crystal' },
+      { key: 'desert', req: 33, prev: 'frozen' },
+    ];
+    for (const u of unlocks) {
+      if (selectedCourseKey === u.prev && totalScore <= u.req) {
+        localStorage.setItem(`golf_unlocked_${u.key}`, 'true');
+        alert(`🎉 You unlocked ${courses[u.key].name}!`);
+      }
+    }
+  }
+
+  // Update home screen UI
+  function updateHomeButtons() {
+    const highScores = [];
+    for (let i = 0; i < courseButtons.length; i++) {
+      const key = Object.keys(courses)[i];
+      const btn = courseButtons[i];
+      btn.textContent = courses[key].name;
+      const highscore = localStorage.getItem(`golf_highscore_${key}`);
+      if (highscore) {
+        highScores.push(`${courses[key].name}: ${highscore} strokes`);
+      }
+      if (key === 'sunshine') {
+        btn.disabled = false;
+        btn.title = '';
+      } else {
+        const unlocked = localStorage.getItem(`golf_unlocked_${key}`) === 'true';
+        btn.disabled = !unlocked;
+        if (!unlocked) {
+          // Show unlock requirement in tooltip
+          switch(key) {
+            case 'moonlight':
+              btn.title = 'Unlock by scoring 30 or less on Sunshine Valley';
+              break;
+            case 'crystal':
+              btn.title = 'Unlock by scoring 32 or less on Moonlight Valley';
+              break;
+            case 'frozen':
+              btn.title = 'Unlock by scoring 33 or less on Crystal Cove';
+              break;
+            case 'desert':
+              btn.title = 'Unlock by scoring 33 or less on Frozen Fjord';
+              break;
+          }
+        } else {
+          btn.title = '';
+        }
+      }
+    }
+    highScoreDisplay.textContent = 'High Scores: ' + (highScores.length ? highScores.join(' | ') : 'None yet');
+  }
+
+  // Select course
+  let selectedCourseIndex = 0;
+  function selectCourse(idx) {
+    selectedCourseIndex = idx;
+    selectedCourseKey = Object.keys(courses)[idx];
+    selectedCourse = courses[selectedCourseKey];
+    startBtn.disabled = false;
+    // Highlight selected button
+    courseButtons.forEach((btn,i) => {
+      btn.style.border = i === idx ? '3px solid #ffb84d' : 'none';
+    });
+    updateHighScoreDisplay();
+  }
+
+  function updateHighScoreDisplay() {
+    const key = selectedCourseKey;
+    const score = localStorage.getItem(`golf_highscore_${key}`);
+    if (score) {
+      highScoreDisplay.textContent = `${courses[key].name} Best: ${score} strokes`;
+    } else {
+      highScoreDisplay.textContent = `${courses[key].name} Best: None`;
+    }
+  }
+
+  // Show home screen
+  function showHomeScreen() {
+    canvas.style.display = 'none';
+    homeScreen.style.display = 'flex';
+    startBtn.disabled = true;
+    updateHomeButtons();
+    selectCourse(0);
+  }
+
+  // Main game loop
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw sand pits
+    drawSandPits();
+
+    // Draw obstacles
+    drawObstacles();
+
+    // Draw hole
+    drawHole();
+
+    // Draw ball
+    drawBall();
+
+    // Draw power line and percent if dragging
+    drawPowerLine();
+    drawPowerPercent();
+
+    updateBall();
+
+    // Update stroke display
+    if (!dragging && ballVel.x === 0 && ballVel.y === 0 && shotPowerPercent === 0) {
+      infoText.textContent = `Hole ${level + 1} | Par: ${selectedCourse.levels[level].par} | Strokes: ${strokesThisHole}`;
+    } else if (dragging) {
+      infoText.textContent = `Pull back to shoot. Power: ${shotPowerPercent}%`;
+    }
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Start game
+  startBtn.addEventListener('click', () => {
+    homeScreen.style.display = 'none';
+    canvas.style.display = 'block';
+    level = 0;
+    strokesThisHole = 0;
+    totalStrokes = [];
+    startLevel();
+    gameLoop();
+  });
+
+  // Course button clicks
+  courseButtons.forEach((btn, i) => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      selectCourse(i);
+    });
+  });
+
+  // On ball stop, increase strokes
+  setInterval(() => {
+    if (!dragging && ballVel.x === 0 && ballVel.y === 0 && shotPowerPercent !== 0) {
+      strokesThisHole++;
+      shotPowerPercent = 0;
+      infoText.textContent = `Hole ${level + 1} | Par: ${selectedCourse.levels[level].par} | Strokes: ${strokesThisHole}`;
+    }
+  }, 200);
+
+  // Initialization
+  showHomeScreen();
+
+})();
+</script>
+
+</body>
+</html>
