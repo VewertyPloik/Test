@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2D Golf</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; text-align: center; background: #aaf; }
+    canvas { background: #6c3; display: block; margin: 0 auto; border: 4px solid #333; touch-action: none; max-width: 100%; height: auto; }
+    #ui { margin-top: 10px; }
+    button { margin: 5px; padding: 10px 20px; font-size: 16px; }
+    #homeScreen { display: block; }
+    #gameUI { display: none; }
+    #powerDisplay { font-size: 20px; margin-top: 5px; }
+    #holeInfo, #courseScore, #coursePar {
+      font-size: 18px;
+      margin: 5px 0;
+      font-weight: bold;
+    }
+    #highScoreDisplay {
+      font-weight: bold;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="title">2D Golf</h1>
+  <div id="homeScreen">
+    <button onclick="startGame()">Play</button>
+  </div>
+  <div id="gameUI">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="ui">
+      <div id="highScoreDisplay"></div>
+      <div id="courseSelect"></div>
+      <div id="holeInfo"></div>
+      <div id="courseScore"></div>
+      <div id="coursePar"></div>
+      <div id="scoreInfo"></div>
+      <div id="scoreCard"></div>
+      <div id="powerDisplay"></div>
+    </div>
+  </div>
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    let courses = [];
+    let currentCourse = 0;
+    let currentHole = 0;
+    let strokes = 0;
+    let pulling = false;
+    let start = null;
+    let scoreCard = [[], [], []];
+    // Save course unlocks (true = unlocked), course 1 always unlocked
+    let courseUnlocked = JSON.parse(localStorage.getItem("golfCourseUnlocked") || '[true,false,false]');
+    let lastTouchMove = null;
+    const powerDisplay = document.getElementById("powerDisplay");
+    const holeInfo = document.getElementById("holeInfo");
+    const courseScoreDisplay = document.getElementById("courseScore");
+    const courseParDisplay = document.getElementById("coursePar");
+    const highScoreDisplay = document.getElementById("highScoreDisplay");
+
+    // Fixed pars for each course:
+    const coursePars = [
+      [3, 3, 3, 4, 3, 3, 3, 3, 4],    // sum 29
+      [4, 4, 4, 4, 4, 4, 3, 4, 4],    // sum 35
+      [5, 5, 5, 4, 4, 4, 4, 3, 6]     // sum 40
+    ];
+
+    class Hole {
+      constructor(x, y, par) {
+        this.startX = 100;
+        this.startY = 250;
+        this.x = x;
+        this.y = y;
+        this.radius = 20; // 2x original hole size
+        this.par = par;
+        this.reset();
+        this.obstacles = this.generateObstacles();
+      }
+      generateObstacles() {
+        const obs = [];
+        for (let i = 0; i < 3; i++) {
+          obs.push({ x: 200 + Math.random() * 400, y: 100 + Math.random() * 300, r: 20 });
+        }
+        return obs;
+      }
+      reset() {
+        this.ballX = this.startX;
+        this.ballY = this.startY;
+        this.vx = 0;
+        this.vy = 0;
+        this.moving = false;
+        strokes = 0;
+      }
+      update() {
+        if (this.moving) {
+          this.ballX += this.vx;
+          this.ballY += this.vy;
+
+          // Bounce off walls
+          if (this.ballX < 10 || this.ballX > canvas.width - 10) {
+            this.vx *= -0.6;
+            this.ballX = Math.max(10, Math.min(this.ballX, canvas.width - 10));
+          }
+          if (this.ballY < 10 || this.ballY > canvas.height - 10) {
+            this.vy *= -0.6;
+            this.ballY = Math.max(10, Math.min(this.ballY, canvas.height - 10));
+          }
+
+          for (let obs of this.obstacles) {
+            const dx = this.ballX - obs.x;
+            const dy = this.ballY - obs.y;
+            if (Math.hypot(dx, dy) < obs.r + 8) {
+              const angle = Math.atan2(dy, dx);
+              this.vx = -this.vx * 0.5;
+              this.vy = -this.vy * 0.5;
+              this.ballX += Math.cos(angle) * 5;
+              this.ballY += Math.sin(angle) * 5;
+            }
+          }
+
+          this.vx *= 0.98;
+          this.vy *= 0.98;
+          if (Math.abs(this.vx) < 0.1 && Math.abs(this.vy) < 0.1) {
+            this.vx = this.vy = 0;
+            this.moving = false;
+
+            const distToHole = Math.hypot(this.ballX - this.x, this.ballY - this.y);
+            const shotPower = Math.hypot(this.lastVx || 0, this.lastVy || 0);
+            const powerPercent = Math.round((shotPower / 40) * 100);
+
+            if (distToHole < this.radius) {
+              if (powerPercent > 40) {
+                this.vx = -this.lastVx * 0.3;
+                this.vy = -this.lastVy * 0.3;
+                this.moving = true;
+              } else {
+                finishHole();
+              }
+            }
+          }
+        }
+      }
+      draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Draw hole
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw obstacles
+        ctx.fillStyle = "#964B00";
+        for (let obs of this.obstacles) {
+          ctx.beginPath();
+          ctx.arc(obs.x, obs.y, obs.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Draw ball
+        ctx.fillStyle = "#000";
+        ctx.beginPath();
+        ctx.arc(this.ballX, this.ballY, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function finishHole() {
+      powerDisplay.textContent = "";
+      scoreCard[currentCourse].push(strokes);
+      currentHole++;
+      if (currentHole >= 9) {
+        showScoreCard();
+      } else {
+        loadHole();
+      }
+      updateCourseScore();
+      updateCoursePar();
+    }
+
+    function showScoreCard() {
+      let html = `<h2>Course ${currentCourse + 1} Scorecard</h2><table><tr><th>Hole</th>`;
+      for (let i = 1; i <= 9; i++) html += `<td>${i}</td>`;
+      html += `</tr><tr><th>Score</th>`;
+      const scores = scoreCard[currentCourse];
+      scores.forEach(s => html += `<td>${s}</td>`);
+      html += `</tr><tr><th>Par</th>`;
+      const pars = courses[currentCourse].map(h => h.par);
+      let totalPar = 0;
+      pars.forEach(p => { html += `<td>${p}</td>`; totalPar += p; });
+      html += `</tr><tr><th>Total</th><td colspan='9'>` + scores.reduce((a,b)=>a+b,0) + ` / Par ${totalPar}</td></tr></table>`;
+
+      let totalStrokes = scores.reduce((a,b)=>a+b,0);
+      let underPar = totalStrokes - totalPar;
+      let unlockedMsg = "";
+
+      // Unlock logic: even or better (<= par) to unlock next course
+      if (underPar <= 0 && currentCourse < 2 && !courseUnlocked[currentCourse + 1]) {
+        courseUnlocked[currentCourse + 1] = true;
+        localStorage.setItem("golfCourseUnlocked", JSON.stringify(courseUnlocked));
+        unlockedMsg = `<p>You unlocked Course ${currentCourse + 2}!</p>`;
+      }
+
+      // Save highscore if better (lower strokes)
+      let prevHigh = localStorage.getItem(`golfHighscore_course_${currentCourse}`);
+      if (!prevHigh || totalStrokes < parseInt(prevHigh)) {
+        localStorage.setItem(`golfHighscore_course_${currentCourse}`, totalStrokes);
+      }
+
+      let highscoreDisplay = localStorage.getItem(`golfHighscore_course_${currentCourse}`) || "N/A";
+
+      html += `<p><strong>Best Score:</strong> ${highscoreDisplay}</p>`;
+      html += unlockedMsg;
+
+      document.getElementById("scoreCard").innerHTML = html;
+      updateUI();
+    }
+
+    function loadHole() {
+      hole = courses[currentCourse][currentHole];
+      hole.reset();
+      updateHoleInfo();
+      updateCourseScore();
+      updateCoursePar();
+    }
+
+    function updateHoleInfo() {
+      const holeNumber = currentHole + 1;
+      const par = hole.par;
+      holeInfo.textContent = `Hole ${holeNumber} - Par ${par}`;
+    }
+
+    function updateCourseScore() {
+      const scores = scoreCard[currentCourse];
+      const pars = courses[currentCourse].map(h => h.par);
+      if (scores.length === 0) {
+        courseScoreDisplay.textContent = `Course ${currentCourse + 1} - Score: Even`;
+        return;
+      }
+      let totalScore = scores.reduce((a,b) => a + b, 0);
+      let totalPar = pars.reduce((a,b) => a + b, 0);
+      let diff = totalScore - totalPar;
+      let diffText = "Even";
+      if (diff < 0) diffText = diff;
+      else if (diff > 0) diffText = "+" + diff;
+      courseScoreDisplay.textContent = `Course ${currentCourse + 1} - Score: ${diffText}`;
+    }
+
+    function updateCoursePar() {
+      const pars = courses[currentCourse].map(h => h.par);
+      let totalPar = pars.reduce((a,b) => a + b, 0);
+      courseParDisplay.textContent = `Course ${currentCourse + 1} - Total Par: ${totalPar}`;
+    }
+
+    function updateUI() {
+      // Show high score for current course
+      let hs = localStorage.getItem(`golfHighscore_course_${currentCourse}`);
+      if (hs === null) hs = "N/A";
+      highScoreDisplay.textContent = `Best Score Course ${currentCourse + 1}: ${hs}`;
+
+      // Course buttons
+      const courseSelect = document.getElementById("courseSelect");
+      courseSelect.innerHTML = '';
+      for (let i = 0; i < courses.length; i++) {
+        const unlocked = courseUnlocked[i];
+        const btn = document.createElement("button");
+        btn.textContent = `Course ${i + 1}`;
+        btn.disabled = !unlocked;
+        if (unlocked) {
+          btn.onclick = () => {
+            currentCourse = i;
+            currentHole = 0;
+            scoreCard[i] = [];
+            document.getElementById("scoreCard").innerHTML = "";
+            powerDisplay.textContent = "";
+            updateUI();
+            loadHole();
+          };
+        }
+        courseSelect.appendChild(btn);
+      }
+      updateCourseScore();
+      updateCoursePar();
+    }
+
+    function startGame() {
+      document.getElementById("homeScreen").style.display = "none";
+      document.getElementById("gameUI").style.display = "block";
+      updateUI();
+    }
+
+    function getPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      if (e.touches && e.touches.length > 0) {
+        return {
+          x: e.touches[0].clientX - rect.left,
+          y: e.touches[0].clientY - rect.top
+        };
+      } else {
+        return {
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        };
+      }
+    }
+
+    canvas.addEventListener("mousedown", e => {
+      if (hole.moving) return;
+      pulling = true;
+      start = getPos(e);
+      updatePowerDisplay(start);
+    });
+    canvas.addEventListener("mouseup", e => {
+      if (!pulling) return;
+      pulling = false;
+      let end = getPos(e);
+      powerDisplay.textContent = "";
+      shootBall(start, end);
+    });
+    canvas.addEventListener("touchstart", e => {
+      if (hole.moving) return;
+      pulling = true;
+      start = getPos(e);
+      updatePowerDisplay(start);
+    });
+    canvas.addEventListener("touchend", e => {
+      if (!pulling) return;
+      pulling = false;
+      powerDisplay.textContent = "";
+      const end = lastTouchMove || start;
+      shootBall(start, end);
+    });
+    canvas.addEventListener("touchmove", e => {
+      lastTouchMove = getPos(e);
+      if (pulling) updatePowerDisplay(lastTouchMove);
+    });
+    canvas.addEventListener("mousemove", e => {
+      if (pulling) {
+        const pos = getPos(e);
+        updatePowerDisplay(pos);
+      }
+    });
+
+    function updatePowerDisplay(pos) {
+      let dx = start.x - pos.x;
+      let dy = start.y - pos.y;
+      dx *= 0.2;
+      dy *= 0.2;
+      const power = Math.min(1, Math.hypot(dx, dy) / 40);
+      const percent = Math.round(power * 100);
+      powerDisplay.textContent = `Power: ${percent}%`;
+    }
+
+    function shootBall(start, end) {
+      let dx = start.x - end.x;
+      let dy = start.y - end.y;
+      dx *= 0.2;
+      dy *= 0.2;
+      hole.vx = dx / 5;
+      hole.vy = dy / 5;
+      hole.lastVx = hole.vx;
+      hole.lastVy = hole.vy;
+      hole.moving = true;
+      strokes++;
+    }
+
+    function loop() {
+      if (hole) {
+        hole.update();
+        hole.draw();
+      }
+      requestAnimationFrame(loop);
+    }
+
+    function createCourses() {
+      // For each course, create 9 holes with fixed pars and random hole positions
+      for (let c = 0; c < 3; c++) {
+        let holes = [];
+        for (let i = 0; i < 9; i++) {
+          let x = 600 + Math.random() * 100;
+          let y = 100 + Math.random() * 300;
+          holes.push(new Hole(x, y, coursePars[c][i]));
+        }
+        courses.push(holes);
+      }
+    }
+
+    let hole;
+    createCourses();
+    loop();
+  </script>
+</body>
+</html>
