@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Game Server</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .container { max-width: 600px; }
+        input { padding: 8px; margin: 5px; }
+        button { padding: 8px 15px; cursor: pointer; }
+        .server-item { padding: 10px; border: 1px solid #ddd; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Game Server Browser</h1>
+        <input type="text" id="username" placeholder="Enter your username">
+        <button onclick="hostServer()">Host Server</button>
+        <div id="serverList"></div>
+        <div id="currentRoom" style="display:none;">
+            <h3>Current Room</h3>
+            <p id="roomInfo"></p>
+            <button onclick="startGame()">Start Game</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentRoom = null;
+        
+        socket.on('serverList', (rooms) => {
+            const list = document.getElementById('serverList');
+            if (Object.keys(rooms).length === 0) {
+                list.innerHTML = '<p>No servers available. Create one!</p>';
+                return;
+            }
+            list.innerHTML = '<h2>Available Servers:</h2>';
+            Object.values(rooms).forEach(room => {
+                if (room.status === 'waiting') {
+                    list.innerHTML += `
+                        <div class="server-item">
+                            <strong>${room.hostName}'s Room</strong> (${room.players.length}/5 players)
+                            <br><small>Room ID: ${room.id}</small>
+                            <button onclick="joinRoom('${room.id}')">Join</button>
+                        </div>
+                    `;
+                }
+            });
+        });
+        
+        function hostServer() {
+            const username = document.getElementById('username').value;
+            if (!username) { alert('Enter a username'); return; }
+            socket.emit('hostServer', username);
+        }
+        
+        function joinRoom(roomId) {
+            const username = document.getElementById('username').value;
+            if (!username) { alert('Enter a username'); return; }
+            socket.emit('joinServer', { roomId, username });
+        }
+        
+        function startGame() {
+            socket.emit('startGame', currentRoom);
+        }
+        
+        socket.on('roomJoined', (room) => {
+            currentRoom = room.id;
+            document.getElementById('currentRoom').style.display = 'block';
+            document.getElementById('roomInfo').textContent = 
+                `Room ${room.id} - Players: ${room.players.map(p => p.name).join(', ')}`;
+            console.log('Joined room:', room);
+        });
+        
+        socket.on('roomUpdated', (room) => {
+            document.getElementById('roomInfo').textContent = 
+                `Room ${room.id} - Players: ${room.players.map(p => p.name).join(', ')}`;
+        });
+        
+        socket.on('gameStarted', (room) => {
+            alert('Game started in room ' + room.id);
+        });
+        
+        socket.on('error', (msg) => {
+            alert('Error: ' + msg);
+        });
+        
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+    </script>
+</body>
+</html>
